@@ -1,0 +1,19 @@
+<RCC>
+    <qresource prefix="/qml">
+        <file>main.qml</file>
+        <file>SetIpDialog.qml</file>
+        <file>SetOsdDialog.qml</file>
+        <file>OtherSettingsDialog.qml</file>
+        <file>Controls/AppButton.qml</file>
+        <file>Controls/AppCheckBox.qml</file>
+        <file>Controls/AppComboBox.qml</file>
+        <file>Controls/AppIpInput.qml</file>
+        <file>Controls/AppMessageBox.qml</file>
+        <file>Controls/AppPasswordField.qml</file>
+        <file>Controls/AppTextField.qml</file>
+        <file>Controls/AppTimePicker.qml</file>
+        <file>Controls/AppCloseButton.qml</file>
+        <file>Controls/AppPanel.qml</file>
+        <file>Controls/DeviceTable.qml</file>
+    </qresource>
+</RCC>
