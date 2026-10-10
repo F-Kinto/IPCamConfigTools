@@ -76,36 +76,12 @@ Dialog {
     contentItem: ColumnLayout {
         anchors.fill: parent
         anchors.bottomMargin: ScreenTools.scaleNum(16)
-        // ===== 1) 标题 + 关闭按钮（高度 48）=====
-        Rectangle {
+        // ===== 1) 标题 + 关闭按钮：与其它弹窗共用同一个标题栏控件 =====
+        AppDialogHeader {
             Layout.fillWidth: true
-            Layout.preferredHeight: ScreenTools.scaleNum(40)
-            radius: ScreenTools.scaleNum(4)
-            color: "#F5F7FA"
-
-            RowLayout {
-                anchors.fill: parent
-                spacing: ScreenTools.scaleNum(8)
-                anchors.leftMargin: ScreenTools.scaleNum(16)
-                anchors.rightMargin: ScreenTools.scaleNum(4)
-                Label {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: ScreenTools.scaleNum(40)
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignLeft
-                    font.family: "Microsoft YaHei"
-                    font.bold: true
-                    font.pointSize: ScreenTools.scaleNum(12, true)
-                    color: "#000000"
-                    text: root.tipTitle
-                }
-                Item{
-                    Layout.fillWidth: true
-                }
-                AppCloseButton {
-                    onClicked: root.reject()
-                }
-            }
+            barHeight: ScreenTools.scaleNum(40)
+            title: root.tipTitle
+            onClosed: root.reject()
         }
 
         // ===== 2) 提示图片 + 提示内容（高度自适应）=====

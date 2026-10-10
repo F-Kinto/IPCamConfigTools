@@ -39,6 +39,15 @@ Rectangle {
         return (index >= 0 && index < 4) ? fields[index] : null;
     }
 
+    // 外部把焦点定位到指定段（0-3）并全选该段内容
+    function focusField(index) {
+        var f = fieldAt(index);
+        if (f) {
+            f.forceActiveFocus();
+            f.selectAll();
+        }
+    }
+
     onValueChanged: {
         var parts = value.split(".");
         e0.text = parts.length > 0 ? parts[0] : "";
@@ -90,28 +99,63 @@ Rectangle {
             if (text.length === 3)
                 jumpTo(1);
         }
-        Keys.onLeftPressed: {
-            // 光标在段首时向左跳到上一段
-            if (cursorPosition === 0) {
-                jumpTo(-1);
-                event.accepted = true;
-            }
+
+        // Up/Down 方向键调整当前段数值（0-255，越界夹紧）
+        function adjustValue(delta) {
+            var v = (seg.text === "") ? 0 : parseInt(seg.text, 10);
+            if (isNaN(v))
+                v = 0;
+            v = Math.min(255, Math.max(0, v + delta));
+            seg.text = String(v);
+            // 改完后全选，便于直接输入覆盖
+            seg.selectAll();
         }
-        Keys.onRightPressed: {
-            // 光标在段尾时向右跳到下一段（一位/两位数字即可跳转）
-            if (cursorPosition === text.length) {
-                jumpTo(1);
-                event.accepted = true;
-            }
-        }
-        // 注意：不能用 Keys.onBackspacePressed，Qt 5.15.2 下该信号处理器会在
-        // QML 加载时触发 QVector<T>::at "index out of range" 断言崩溃，
-        // 需改用通用 onPressed 自行判断键值
+
+        // 按键统一在 onPressed 里处理。
+        // 注意：QKeyEvent 默认 accepted=true，挂在 Keys 上的处理器若不显式放行
+        // （event.accepted = false），事件就被 Keys 附加属性拦下，TextField 原生的
+        // 方向键/编辑行为（段内移动光标、取消全选、退格删除）会全部失效
         Keys.onPressed: {
-            // 段内为空时退格跳到上一段（全选，可直接覆盖输入）
-            if (event.key === Qt.Key_Backspace && text === "") {
-                jumpTo(-1);
+            switch (event.key) {
+            case Qt.Key_Left:
+                // 段首（且无选中）向左跳到上一段
+                if (seg.selectionStart === seg.selectionEnd && seg.cursorPosition === 0) {
+                    jumpTo(-1);
+                    event.accepted = true;
+                } else {
+                    event.accepted = false; // 交给原生：段内移动 / 取消全选
+                }
+                break;
+            case Qt.Key_Right:
+                // 段尾（且无选中）向右跳到下一段
+                if (seg.selectionStart === seg.selectionEnd && seg.cursorPosition === seg.text.length) {
+                    jumpTo(1);
+                    event.accepted = true;
+                } else {
+                    event.accepted = false; // 交给原生：段内移动 / 取消全选
+                }
+                break;
+            case Qt.Key_Up:
+                adjustValue(1);
                 event.accepted = true;
+                break;
+            case Qt.Key_Down:
+                adjustValue(-1);
+                event.accepted = true;
+                break;
+            case Qt.Key_Backspace:
+                // 段内为空时退格跳到上一段（全选，可直接覆盖输入）
+                // 注意：不能用 Keys.onBackspacePressed，Qt 5.15.2 下会触发断言崩溃
+                if (seg.text === "") {
+                    jumpTo(-1);
+                    event.accepted = true;
+                } else {
+                    event.accepted = false; // 交给原生删除
+                }
+                break;
+            default:
+                event.accepted = false; // 其余按键全部交还 TextField 原生处理
+                break;
             }
         }
         onActiveFocusChanged: {

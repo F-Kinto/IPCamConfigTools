@@ -1,4 +1,4 @@
-﻿#pragma execution_character_set("utf-8")
+#pragma execution_character_set("utf-8")
 #include "AppLogger.h"
 
 #include <QCoreApplication>
@@ -23,23 +23,21 @@ namespace {
 const char* kLogFileName = "LogText.txt";
 
 // 输出一行日志到调试控制台。
-// Windows 控制台/VS 输出窗口默认按本地编码（GBK）解码，直接 fprintf UTF-8 字节会乱码，
-// 所以这里优先用 Unicode 接口：挂在调试器下走 OutputDebugStringW（VS “输出”窗口），
-// 普通控制台走 WriteConsoleW；只有当 stderr 被重定向到文件/管道时（WriteConsoleW 失败）
-// 才回退写 UTF-8 字节，与日志文件编码保持一致。
-//
-// 注意：IDE 调试运行时调试器既收 OutputDebugStringW，又捕获重定向的 stderr，
-// 两条都写会看到“一行正常 + 一行乱码”，所以挂调试器时只走 OutputDebugStringW。
+// 每条日志只走一个通道，避免捕获工具同时抓到调试串和 stderr 时显示两遍：
+// 1) 挂在调试器下：只走 OutputDebugStringW（Unicode，VS“输出”窗口/调试查看器正常显示）；
+// 2) 普通控制台：WriteConsoleW（Unicode 直写缓冲区，不受控制台 GBK 代码页影响）；
+// 3) stderr 被重定向到文件/管道时（WriteConsoleW 失败）：fprintf 按本地编码（GBK）输出，
+//    与 Windows 控制台的默认解码习惯一致。
 void outputToDebugConsole(const QString& record)
 {
 #ifdef Q_OS_WIN
-    if (::IsDebuggerPresent()) {
-        ::OutputDebugStringW((std::wstring(reinterpret_cast<const wchar_t*>(record.utf16())) + L"\n").c_str());
-        return;
-    }
-
     const wchar_t* wide = reinterpret_cast<const wchar_t*>(record.utf16());
     const DWORD    wideLen = static_cast<DWORD>(record.length());
+
+    if (::IsDebuggerPresent()) {
+        ::OutputDebugStringW((std::wstring(wide) + L"\n").c_str());
+        return;
+    }
 
     const HANDLE err = ::GetStdHandle(STD_ERROR_HANDLE);
     DWORD        written = 0;
@@ -49,7 +47,7 @@ void outputToDebugConsole(const QString& record)
         return;
     }
 #endif
-    std::fprintf(stderr, "%s\n", record.toUtf8().constData());
+    std::fprintf(stderr, "%s\n", record.toLocal8Bit().constData());
     std::fflush(stderr);
 }
 
@@ -119,16 +117,15 @@ void AppLogger::writeRecord(const QString& level, const QString& file, int line,
 
     QFile out(logFilePath());
     if (out.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        // 新建的日志文件先写 UTF-8 BOM，避免记事本等按本地编码打开时中文乱码
-        if (out.size() == 0)
-            out.write("\xEF\xBB\xBF");
         QTextStream stream(&out);
         stream.setCodec("UTF-8");
         stream << record << "\n";
         out.close();
     }
 
-    // 同时输出到调试控制台（不经过 Qt 日志，避免递归调用消息处理器）
+    // 同时输出到调试控制台（不经过 Qt 日志，避免递归调用消息处理器）。
+    // 内部按场景选择：调试器 -> OutputDebugStringW；控制台 -> WriteConsoleW（Unicode，
+    // 不受控制台 GBK 代码页影响）；重定向到文件/管道 -> 回退 UTF-8 字节
     outputToDebugConsole(record);
 }
 

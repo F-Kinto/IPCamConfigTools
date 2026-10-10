@@ -97,7 +97,7 @@ static QMap<quint32, AdapterInfo> queryAdapterInfos()
  *  2) 隧道适配器 IF_TYPE_TUNNEL(131)：Teredo / 6to4 / ISATAP / IP-HTTPS
  *  3) 没有物理地址（MAC）的虚拟接口：Hyper-V vSwitch、Wi-Fi Direct 虚拟适配器等
  *     （已连接的 PPP/VPN 例外，ipconfig 会显示它们）
- *  4) 名称含“本地连接”的隐藏/虚拟连接（按需求隐藏）
+ *  4) 名称含"本地连接"的隐藏/虚拟连接（按需求隐藏）
  *
  * @param iface 待判断的网卡
  * @param info  该网卡的附加信息（接口类型等）
@@ -122,8 +122,8 @@ static bool isIpconfigVisible(const QNetworkInterface& iface, const AdapterInfo&
             return false;
     }
 
-    // 4) 名称含“本地连接”的连接不加入列表（英文系统为 Local Area Connection）
-    //    包括 ipconfig 中显示为“无线局域网适配器 本地连接* N”的无线承载网络虚拟适配器
+    // 4) 名称含"本地连接"的连接不加入列表（英文系统为 Local Area Connection）
+    //    包括 ipconfig 中显示为"无线局域网适配器 本地连接* N"的无线承载网络虚拟适配器
     const QString readableName = iface.humanReadableName();
     if (readableName.contains(QStringLiteral("本地连接"), Qt::CaseInsensitive)
      || readableName.contains(QStringLiteral("Local Area Connection"), Qt::CaseInsensitive))
@@ -210,72 +210,6 @@ qreal ScreenTools::getDevicePixelRatio() const
     return (scale < 1.5 && scale > 1.0) ? scale : 1.0;
 }
 
-int ScreenTools::calculateMultiTextWidth(const QString& str1, const QString& str2, const QString& str3, const QString& str4, const int fontSize, bool bold, bool isPixelFont)
-{
-    QString maxStr = str1;
-    QString max1   = str1.length() >= str2.length() ? str1 : str2;
-    QString max2   = str3.length() >= str4.length() ? str3 : str4;
-    maxStr         = max1.length() > max2.length() ? max1 : max2;
-    return calculateTextWidth(maxStr, fontSize, bold, isPixelFont);
-}
-
-int ScreenTools::calculateMultiLineHeight(const QString& text, int fontSize, int maxWidth, bool isBold, bool isPixelFont)
-{
-    QFont font("Microsoft YaHei UI");
-    if (isPixelFont)
-        font.setPixelSize(fontSize > 0 ? fontSize : 10);
-    else
-        font.setPointSize(fontSize > 0 ? fontSize : 10);
-    font.setBold(isBold);
-    QFontMetrics fm(font);
-    int          lineCount = calculateLineCount(text, font, maxWidth);
-    return lineCount * (fm.height() + 5);
-}
-
-int ScreenTools::calculateTextWidth(const QString& text, int fontSize, bool isBold, bool isPixelFont)
-{
-    QFont font("Microsoft YaHei UI");
-    if (isPixelFont)
-        font.setPixelSize(fontSize > 0 ? fontSize : 10);
-    else
-        font.setPointSize(fontSize > 0 ? fontSize : 10);
-    font.setBold(isBold);
-    QFontMetrics fm(font);
-    return fm.width(text);
-}
-
-int ScreenTools::calculateLineCount(const QString& text, const QFont& font, int maxWidth)
-{
-    if (text.isEmpty() || maxWidth <= 0) {
-        return 0;
-    }
-    QFontMetrics fm(font);
-    int          textHeight = fm.boundingRect(4, 4, maxWidth, 0, Qt::TextWrapAnywhere | Qt::AlignLeft, text).height();
-    int          lineHeight = fm.height();
-    return (textHeight + lineHeight - 1) / lineHeight; // 向上取整
-}
-
-QString ScreenTools::getLocalOuterIpv4Address()
-{
-    // 获取当前出口IP，防止频繁获取
-    QString  outerIp = "";
-    QProcess process;
-    process.start("curl", QStringList() << "-s"
-                                        << "ifconfig.me");
-
-    if (!process.waitForFinished(3000)) {
-        qWarning() << "Curl command timed out or failed";
-        return QString();
-    }
-    if (process.exitCode() != 0) {
-        qWarning() << "Curl failed with error:" << process.errorString();
-        return QString();
-    }
-    QByteArray output = process.readAllStandardOutput();
-    outerIp           = QString::fromUtf8(output).trimmed();
-    return outerIp.isEmpty() ? getLocalIpv4Address() : outerIp;
-}
-
 QString ScreenTools::getLocalIpv4Address()
 {
     QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
@@ -306,7 +240,7 @@ QString ScreenTools::getLocalIpv4Address()
  *  netmask            : QString    首个 IPv4 地址对应的子网掩码
  *
  * 只返回 ipconfig /all 能看到的网卡：过滤回环口、隧道适配器（Teredo/6to4/ISATAP）、
- * 无 MAC 的虚拟接口，并隐藏名称含“本地连接”的连接（详见 isIpconfigVisible）
+ * 无 MAC 的虚拟接口，并隐藏名称含"本地连接"的连接（详见 isIpconfigVisible）
  *
  * @return 网卡信息列表
  */
@@ -427,6 +361,8 @@ int ScreenTools::scaleNum(int originValue, bool isFont)
         return qRound((originValue * ScreenTools::instance()->m_testScale));
     }
 }
+
+//
 
 QString ScreenTools::getFormatString(const QString& str, int columnWidth, int fontSize, bool isBold)
 {
@@ -554,4 +490,70 @@ void ScreenTools::setRectHeightScale()
         m_rectHeightScale = 1.0;
     }
     emit signalRectHeightScaleChanged();
+}
+
+int ScreenTools::calculateMultiTextWidth(const QString& str1, const QString& str2, const QString& str3, const QString& str4, const int fontSize, bool bold, bool isPixelFont)
+{
+    QString maxStr = str1;
+    QString max1   = str1.length() >= str2.length() ? str1 : str2;
+    QString max2   = str3.length() >= str4.length() ? str3 : str4;
+    maxStr         = max1.length() > max2.length() ? max1 : max2;
+    return calculateTextWidth(maxStr, fontSize, bold, isPixelFont);
+}
+
+int ScreenTools::calculateMultiLineHeight(const QString& text, int fontSize, int maxWidth, bool isBold, bool isPixelFont)
+{
+    QFont font("Microsoft YaHei UI");
+    if (isPixelFont)
+        font.setPixelSize(fontSize > 0 ? fontSize : 10);
+    else
+        font.setPointSize(fontSize > 0 ? fontSize : 10);
+    font.setBold(isBold);
+    QFontMetrics fm(font);
+    int          lineCount = calculateLineCount(text, font, maxWidth);
+    return lineCount * (fm.height() + 5);
+}
+
+int ScreenTools::calculateTextWidth(const QString& text, int fontSize, bool isBold, bool isPixelFont)
+{
+    QFont font("Microsoft YaHei UI");
+    if (isPixelFont)
+        font.setPixelSize(fontSize > 0 ? fontSize : 10);
+    else
+        font.setPointSize(fontSize > 0 ? fontSize : 10);
+    font.setBold(isBold);
+    QFontMetrics fm(font);
+    return fm.width(text);
+}
+
+int ScreenTools::calculateLineCount(const QString& text, const QFont& font, int maxWidth)
+{
+    if (text.isEmpty() || maxWidth <= 0) {
+        return 0;
+    }
+    QFontMetrics fm(font);
+    int          textHeight = fm.boundingRect(4, 4, maxWidth, 0, Qt::TextWrapAnywhere | Qt::AlignLeft, text).height();
+    int          lineHeight = fm.height();
+    return (textHeight + lineHeight - 1) / lineHeight; // 向上取整
+}
+
+QString ScreenTools::getLocalOuterIpv4Address()
+{
+    // 获取当前出口IP，防止频繁获取
+    QString  outerIp = "";
+    QProcess process;
+    process.start("curl", QStringList() << "-s"
+                                        << "ifconfig.me");
+
+    if (!process.waitForFinished(3000)) {
+        qWarning() << "Curl command timed out or failed";
+        return QString();
+    }
+    if (process.exitCode() != 0) {
+        qWarning() << "Curl failed with error:" << process.errorString();
+        return QString();
+    }
+    QByteArray output = process.readAllStandardOutput();
+    outerIp           = QString::fromUtf8(output).trimmed();
+    return outerIp.isEmpty() ? getLocalIpv4Address() : outerIp;
 }

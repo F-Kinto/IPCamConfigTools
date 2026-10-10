@@ -1,4 +1,4 @@
-﻿#include "TranslatorManager.h"
+#include "TranslatorManager.h"
 #include <QCoreApplication>
 #include <QSettings>
 #include "ConfigureManager.h"
@@ -95,6 +95,38 @@ void TranslatorManager::setInitLangusge()
     } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eArabia) {
         changeLanguage("AR", "ar"); // 阿拉伯语
     }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eVietnam)
+    // {
+    // 	changeLanguage("VI", "vi"); // 越南语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eMalaysia)
+    // {
+    // 	changeLanguage("MS", "ms"); // 马来语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::ePoland)
+    // {
+    // 	changeLanguage("PL", "pl"); // 波兰语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eIndia)
+    // {
+    // 	changeLanguage("IN", "hi"); // 印第安语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eIsrael)
+    // {
+    // 	changeLanguage("HE", "he"); // 希伯来语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eKorea)
+    // {
+    // 	changeLanguage("KO", "ko"); // 韩语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eIndonesia)
+    // {
+    // 	changeLanguage("ID", "id"); // 印尼语
+    // }
+    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eDutch)
+    // {
+    // 	changeLanguage("NL", "nl"); // 荷兰语
+    // }
     else {
         // 默认为英文
         changeLanguage("EN", "en");

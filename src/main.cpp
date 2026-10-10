@@ -1,4 +1,4 @@
-﻿#include <QGuiApplication>
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlEngine>
 #include <QJSEngine>
@@ -7,6 +7,8 @@
 
 #include "Public/AppLogger.h"
 #include "Public/ConfigureManager.h"
+#include "Public/DeviceManager.h"
+#include "Public/DeviceScanner.h"
 #include "Public/TranslatorManager.h"
 #include "Public/screentools.h"
 
@@ -40,6 +42,10 @@ int main(int argc, char* argv[]) {
     registerSingleton<AppLogger>("AppLogger");
     registerSingleton<ConfigureManager>("ConfigureManager");
     registerSingleton<TranslatorManager>("TranslatorManager");
+    // 设备搜索：串联 WifiBroadcast 广播扫描与界面列表
+    registerSingleton<DeviceScanner>("DeviceScanner");
+    // 界面选中设备的管理者：勾选多台（QMap<uid, 设备信息>）+ 当前选中一台
+    registerSingleton<DeviceManager>("DeviceManager");
 
     const QUrl url(QStringLiteral("qrc:/qml/main.qml"));
     QObject::connect(

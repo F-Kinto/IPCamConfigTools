@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace EnumNameSpace {
 
@@ -15,6 +15,14 @@ enum class LanguageType {
     eItaly,       // 意大利语
     ePortugal,    // 葡萄牙语
     eArabia       // 阿拉伯语
+};
+
+// 应用目录类型
+enum class AppDir {
+    eApp = 0, // 程序所在目录
+    eTest,    // 测试目录（TestDir）
+    eConfig,  // 配置目录
+    eLog      // 日志目录
 };
 
 } // namespace EnumNameSpace

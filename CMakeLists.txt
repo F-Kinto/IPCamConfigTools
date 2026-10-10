@@ -20,6 +20,13 @@ set(PUBLIC_SOURCES
     src/Public/TranslatorManager.cpp
     src/Public/AppLogger.h
     src/Public/AppLogger.cpp
+    src/Public/common_global.h
+    src/Public/WifiBroadcast.h
+    src/Public/WifiBroadcast.cpp
+    src/Public/DeviceScanner.h
+    src/Public/DeviceScanner.cpp
+    src/Public/DeviceManager.h
+    src/Public/DeviceManager.cpp
 )
 
 set(PROJECT_SOURCES
@@ -37,6 +44,11 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Public
 )
+
+# WifiBroadcast 来自 common 库（COMMON_EXPORT），本项目直接编进可执行文件，
+# 定义 BUILD_STATIC 让 COMMON_EXPORT 展开为空，避免出现 dllimport 符号
+# 注意：必须在 add_executable 之后调用，否则目标还不存在会报 "not built by this project"
+target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_STATIC)
 
 # MSVC 默认按本地代码页(GBK)解码源码，会把 UTF-8 中文注释后的换行符吞掉（C4819/行号错位）
 # 强制以 UTF-8 读取源码与生成字符串常量

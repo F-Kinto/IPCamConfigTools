@@ -2,26 +2,28 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Qt.labs.qmlmodels 1.0
-// 用命名空间导入：避免与 QtQuick.Controls 的 Menu / Dialog 等类型重名
-import Qt.labs.platform 1.1 as Platform
+// 用别名导入：QtQuick.Dialogs 也提供名为 Dialog 的类型，
+// 不加别名会覆盖 QtQuick.Controls 的 Dialog（导致 footer/header 赋值报错）
+import QtQuick.Dialogs 1.3 as AppDialogs
 import IPCam.Public 1.0
-// 项目内封装的通用控件目录
+// 项目内封装的通用控件目录（AppButton / AppTextField / DeviceTable 等）
 import "Controls"
 
 ApplicationWindow {
     id: root
 
-    // 表格列标题（共 10 列，默认可视区域只显示前 6 列，其余需拖动底部水平滚动条）
-    property var tableTitles: [qsTr("IP地址"), qsTr("云ID"), qsTr("全网通"), qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("序列号"), qsTr("设备类型")]
+    // 表格列标题（共 8 列，默认可视区域只显示前 6 列，其余需拖动底部水平滚动条）
+    // 顺序与下方 TableModelColumn 一一对应；设备ID（UID）填在“云ID”列
+    property var tableTitles: [qsTr("IP地址"), qsTr("云ID"), qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("设备类型")]
     // 是否允许鼠标拖拽表头分割线调整列宽
     property bool tableResizable: true
-    // 列宽模式：false = 固定列宽（前 6 列合计约等于默认可视宽度，第 7~10 列需横向滚动查看）
-    //           true  = 按 tableStretchFactors 权重拉伸，10 列全部压缩进可视区
+    // 列宽模式：false = 固定列宽（前 6 列合计约等于默认可视宽度，第 7~8 列需横向滚动查看）
+    //           true  = 按 tableStretchFactors 权重拉伸，8 列全部压缩进可视区
     property bool tableStretchToFill: false
     // 固定列宽（tableStretchToFill 为 false 时生效）
-    property var tableFixedWidths: [ScreenTools.scaleNum(150), ScreenTools.scaleNum(120), ScreenTools.scaleNum(100), ScreenTools.scaleNum(130), ScreenTools.scaleNum(193), ScreenTools.scaleNum(193), ScreenTools.scaleNum(130), ScreenTools.scaleNum(150), ScreenTools.scaleNum(150), ScreenTools.scaleNum(120)]
+    property var tableFixedWidths: [ScreenTools.scaleNum(150), ScreenTools.scaleNum(190), ScreenTools.scaleNum(130), ScreenTools.scaleNum(193), ScreenTools.scaleNum(193), ScreenTools.scaleNum(130), ScreenTools.scaleNum(150), ScreenTools.scaleNum(120)]
     // 拉伸权重（tableStretchToFill 为 true 时生效）
-    property var tableStretchFactors: [1.1, 1, 0.9, 1.1, 1.3, 1.3, 1.1, 1.2, 1.2, 1.1]
+    property var tableStretchFactors: [1.1, 1.6, 1.1, 1.3, 1.3, 1.1, 1.2, 1.1]
     // 统一控件高度
     readonly property int controlHeight: ScreenTools.scaleNum(30)
     // 统一字体
@@ -32,11 +34,14 @@ ApplicationWindow {
     // 已勾选设备的行号（由“全选 / 反选”维护）
     property var selectedRows: []
     readonly property int selectedCount: selectedRows.length
-    // 固件升级：上一次打开固件文件所在目录（没选过时用系统默认目录）
-    property url lastFirmwareDir: ""
-    // 固件升级：已选择的升级文件本地路径列表（支持多选）
-    property var fwFilePaths: []
-
+    // 设备搜索中：按钮禁用、结束后由 DeviceScanner.searchFinished 复位
+    property bool searching: false
+    // 搜索时长（秒），与“系统配置 - 搜索时间(秒)”联动
+    property int searchSeconds: 5
+    // 固件升级：已选择的升级文件（本地路径列表，*.bin，可多选）
+    property var upgradeFiles: []
+    // 上次打开“升级文件”选择框时所在的目录（由 ConfigureManager 持久化到 ini）
+    readonly property string lastUpgradeDir: ConfigureManager.upgradeDir
     // 网卡信息列表（ScreenTools::getNetworkInterfaces() 的返回值，已过滤为 ipconfig 可见项）
     property var nicList: []
     // 网卡下拉框数据：第一项固定“所有网卡”，之后为各网卡
@@ -125,6 +130,58 @@ ApplicationWindow {
         selectedRows = list;
     }
 
+    // 表格排序后行号重排：按 DeviceTable 给出的“旧行号 -> 新行号”映射同步已选行
+    function remapSelectedRows(indexMap) {
+        var list = [];
+        for (var i = 0; i < root.selectedRows.length; i++) {
+            var newIndex = indexMap[root.selectedRows[i]];
+            if (newIndex !== undefined)
+                list.push(newIndex);
+
+        }
+        root.selectedRows = list;
+    }
+
+    // 表格里某一行的复选框勾选/取消：同步进 selectedRows，
+    // “已选数量”与“请先选择设备”的校验都读这份数据，自动保持一致
+    function setRowChecked(row, checked) {
+        var list = root.selectedRows.slice();
+        var idx = list.indexOf(row);
+        if (checked && idx < 0) {
+            list.push(row);
+        } else if (!checked && idx >= 0) {
+            list.splice(idx, 1);
+        }
+        selectedRows = list;
+    }
+
+    // ===== 选中设备的持久化（交给 C++ 的 DeviceManager）=====
+    // 勾选（可多选）的设备按 uid 存进 QMap<uid, DeviceInfo>，供批量操作直接取用。
+    // 行号会随排序 / 重新搜索变化，所以这里只同步“设备本身”，不存行号
+    function syncCheckedDevices() {
+        var list = [];
+        for (var i = 0; i < root.selectedRows.length; i++) {
+            var dev = deviceModel.rows[root.selectedRows[i]];
+            if (dev !== undefined)
+                list.push(dev);
+
+        }
+        DeviceManager.syncCheckedDevices(list);
+    }
+
+    // 勾选的行号一变就同步一次（单个勾选 / 全选 / 反选 / 清空都走这里）
+    onSelectedRowsChanged: root.syncCheckedDevices()
+
+    // 当前选中（浅蓝高亮）的那一条单独保存一份，供单台操作取用
+    function syncCurrentDevice() {
+        var row = deviceTable.currentRow;
+        if (row >= 0 && row < deviceModel.rowCount)
+            DeviceManager.setCurrentDevice(deviceModel.rows[row]);
+        else
+            DeviceManager.clearCurrentDevice();
+
+    }
+
     // ===== 操作日志 =====
     // 从调用栈里取“调用 logAction 的那一层”的位置（第 0 帧是 logAction 自身）
     // 返回 {file, line, function}，解析失败时返回空串/0
@@ -195,6 +252,84 @@ ApplicationWindow {
         AppLogger.write(loc["file"], loc["line"], loc["function"], text);
     }
 
+    // ===== 设备搜索 =====
+    // 触发一次广播搜索：网段 = 主界面所选网卡对应的网段（选“所有网卡”则不限制），
+    // 时长 = “系统配置 - 搜索时间(秒)”；结果由下方 Connections 逐台追加进列表
+    function searchDevices() {
+        if (root.searching)
+            return;
+
+        // 选中“所有网卡”时为 null，传空串表示不限制网段
+        var nic = root.currentNic();
+        // WifiBroadcast 按“可读名 / 网卡名 / 网卡 IPv4”匹配网卡，优先传可读名
+        var nicName = nic ? (nic["humanReadableName"] || nic["displayName"] || "") : "";
+        var ips = nic ? (nic["ipv4"] || []) : [];
+        var nicDesc = nic ? (nicName + "(" + (ips.length > 0 ? ips[0] : qsTr("无IP")) + ")") : qsTr("所有网卡");
+
+        root.logAction(qsTr("设备搜索开始: 网卡=%1, 时长=%2秒").arg(nicDesc).arg(root.searchSeconds));
+
+        // 清空上一次的结果、勾选与选中行
+        // （selectedRows / currentRow 归零会触发同步；这里再显式清一次，
+        //  避免“本来就是 0 / -1 不触发变化信号”导致 C++ 侧残留上一轮的设备）
+        deviceModel.rows = [];
+        root.selectedRows = [];
+        deviceTable.currentRow = -1;
+        DeviceManager.clearCheckedDevices();
+        DeviceManager.clearCurrentDevice();
+        root.searching = true;
+        DeviceScanner.startSearch(nicName, root.searchSeconds);
+    }
+
+    // ===== 固件升级 =====
+    // file:/// 开头的 url 转本地路径（如 "file:///C:/a/b.bin" -> "C:/a/b.bin"）
+    function urlToLocalPath(url) {
+        var s = String(url);
+        if (s.indexOf("file:///") === 0)
+            s = s.substring(8);
+        return decodeURIComponent(s);
+    }
+
+    // 取本地路径里的文件名（如 "C:/a/b.bin" -> "b.bin"）
+    function pathFileName(path) {
+        var i = Math.max(String(path).lastIndexOf("/"), String(path).lastIndexOf("\\"));
+        return i >= 0 ? String(path).substring(i + 1) : String(path);
+    }
+
+    // 取本地路径里的目录（如 "C:/a/b.bin" -> "C:/a"）
+    function pathDirName(path) {
+        var s = String(path);
+        var i = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
+        return i >= 0 ? s.substring(0, i) : s;
+    }
+
+    // 已选文件在“升级文件”输入框里的摘要（最多列 3 个，超出显示总数）
+    function upgradeFileSummary() {
+        var files = root.upgradeFiles;
+        if (files.length === 0)
+            return "";
+
+        var names = [];
+        for (var i = 0; i < files.length && i < 3; i++)
+            names.push(root.pathFileName(files[i]));
+
+        var text = names.join(", ");
+        if (files.length > 3)
+            text += qsTr(" 等 %1 个文件").arg(files.length);
+        return text;
+    }
+
+    // “文件一键升级”：先校验升级文件，再校验设备，最后执行升级
+    function startFileUpgrade() {
+        if (root.upgradeFiles.length === 0) {
+            tipBox.show(qsTr("温馨提示"), qsTr("请先选择升级文件"));
+            return;
+        }
+        if (!root.ensureDeviceSelected())
+            return;
+
+        root.logAction(qsTr("开始升级: 文件 %1 个, 设备 %2 台").arg(root.upgradeFiles.length).arg(root.selectedCount));
+    }
+
     // 设备操作前置校验：列表为空或没勾选任何设备时提示，返回 false 表示中断
     function ensureDeviceSelected() {
         if (deviceModel.rowCount === 0 || root.selectedCount === 0) {
@@ -214,10 +349,34 @@ ApplicationWindow {
     font.family: "Microsoft YaHei"
     font.pointSize: ScreenTools.scaleNum(10, true)
 
+    // 接收设备搜索结果：每发现一台追加一行，搜索结束复位按钮状态
+    Connections {
+        target: DeviceScanner
+
+        // 用显式函数写法（Qt 5.15 对隐式 onFoo 写法会告警）
+        function onDeviceFound(device) {
+            deviceModel.appendRow(device);
+        }
+        function onSearchFinished(count) {
+            root.searching = false;
+            root.logAction(qsTr("设备搜索结束: 共发现 %1 台设备").arg(count));
+        }
+    }
+
+    // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的“当前设备”
+    Connections {
+        target: deviceTable
+        function onCurrentRowChanged() {
+            root.syncCurrentDevice();
+        }
+    }
+
     // 启动时拉取一次网卡列表（并按配置文件自动回显），随后把网卡信息打印到日志
     Component.onCompleted: {
         root.refreshNics();
         root.logNicList();
+        // 程序启动自动执行一次设备搜索；延后一个事件循环，等窗口与表格就绪
+        Qt.callLater(root.searchDevices);
     }
 
     ColumnLayout {
@@ -316,6 +475,8 @@ ApplicationWindow {
                     border.color: "#333333"
 
                     DeviceTable {
+                        id: deviceTable
+
                         anchors.fill: parent
                         // 让出 2px 边框，表格内容显示在框内
                         anchors.margins: ScreenTools.scaleNum(2)
@@ -327,6 +488,18 @@ ApplicationWindow {
                         headerHeight: Math.round(root.controlHeight * 1.5)
                         rowHeight: root.controlHeight
                         labelFont: root.appFont
+                        // IP 列（第 0 列）显示“复选框 + IP”，勾选状态与“已选数量”联动
+                        checkBoxColumn: 0
+                        checkedRows: root.selectedRows
+                        onRowChecked: root.setRowChecked(row, checked)
+                        // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
+                        columnRoles: ["ip", "cloudId", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
+                        // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
+                        // 并按新的行号重新保存“当前选中设备”（数据此时已是最新的）
+                        onRowsReordered: {
+                            root.remapSelectedRows(indexMap);
+                            root.syncCurrentDevice();
+                        }
 
                         model: TableModel {
                             id: deviceModel
@@ -336,9 +509,6 @@ ApplicationWindow {
                             }
                             TableModelColumn {
                                 display: "cloudId"
-                            }
-                            TableModelColumn {
-                                display: "allNetcom"
                             }
                             TableModelColumn {
                                 display: "status"
@@ -354,9 +524,6 @@ ApplicationWindow {
                             }
                             TableModelColumn {
                                 display: "mac"
-                            }
-                            TableModelColumn {
-                                display: "serialNo"
                             }
                             TableModelColumn {
                                 display: "deviceType"
@@ -380,8 +547,13 @@ ApplicationWindow {
                     }
                     AppButton {
                         Layout.fillWidth: true
-                        text: qsTr("设备搜索")
-                        onClicked: root.logAction(qsTr("我点击了%1按钮").arg(text))
+                        // 搜索中改变文案并禁用，避免重复触发
+                        text: root.searching ? qsTr("搜索中...") : qsTr("设备搜索")
+                        enabled: !root.searching
+                        onClicked: {
+                            root.logAction(qsTr("我点击了%1按钮").arg(qsTr("设备搜索")));
+                            root.searchDevices();
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -524,31 +696,15 @@ ApplicationWindow {
                     text: qsTr("升级文件")
                 }
                 AppTextField {
-                    id: fwFilePathInput
+                    id: upgradeFileInput
+
                     Layout.fillWidth: true
                     Layout.columnSpan: 2
                     Layout.minimumWidth: ScreenTools.scaleNum(60)
-                    // 手动粘贴/输入路径时也同步记住目录（多个文件以 “;” 分隔）
-                    onEditingFinished: {
-                        if (text.length === 0) {
-                            root.fwFilePaths = [];
-                            return;
-                        }
-                        var arr = text.split(";");
-                        var list = [];
-                        for (var i = 0; i < arr.length; i++) {
-                            var one = arr[i].trim();
-                            if (one.length > 0)
-                                list.push(one);
-                        }
-                        root.fwFilePaths = list;
-                        if (list.length > 0) {
-                            var p = list[list.length - 1].replace(/\\/g, "/");
-                            var idx = p.lastIndexOf("/");
-                            if (idx > 0)
-                                root.lastFirmwareDir = "file:///" + p.substring(0, idx);
-                        }
-                    }
+                    // 展示已选文件摘要；路径很长时末尾省略
+                    text: root.upgradeFileSummary()
+                    readOnly: true
+                    placeholderText: qsTr("请选择 .bin 升级文件（可多选）")
                 }
                 RowLayout {
                     spacing: ScreenTools.scaleNum(6)
@@ -557,20 +713,14 @@ ApplicationWindow {
                         text: qsTr("浏览")
                         onClicked: {
                             root.logAction(qsTr("我点击了%1按钮（升级文件）").arg(text));
-                            fwFileDialog.open();
+                            upgradeFileDialog.open();
                         }
                     }
                     AppButton {
                         text: qsTr("文件一键升级")
                         onClicked: {
-                            // 未选择升级文件时只提示，不执行升级
-                            if (root.fwFilePaths.length === 0 || fwFilePathInput.text.trim() === "") {
-                                tipBox.show(qsTr("温馨提示"), qsTr("请先选择升级文件"));
-                                console.log(qsTr("固件升级-一键升级失败: 未选择升级文件"));
-                                return;
-                            }
                             root.logAction(qsTr("我点击了%1按钮").arg(text));
-                            console.log(qsTr("固件升级-开始一键升级, 共%1个文件").arg(root.fwFilePaths.length));
+                            root.startFileUpgrade();
                         }
                     }
                 }
@@ -836,32 +986,28 @@ ApplicationWindow {
         id: tipBox
     }
 
-    // ===== 固件升级：升级文件选择（只筛选 *.bin，默认打开上次所在目录） =====
-    Platform.FileDialog {
-        id: fwFileDialog
-        title: qsTr("选择固件升级文件")
-        // 多选已存在的固件文件（可 Ctrl / Shift 多选）
-        fileMode: Platform.FileDialog.OpenFiles
-        // 只筛选 .bin 结尾的固件文件
+    // ===== 升级文件选择框 =====
+    // 1) 只筛 *.bin；2) 默认打开上次所在目录（ConfigureManager 持久化），没记录时用“我的文档”
+    // 3) selectMultiple 支持一次选多个文件
+    AppDialogs.FileDialog {
+        id: upgradeFileDialog
+
+        title: qsTr("请选择升级文件")
+        selectMultiple: true
         nameFilters: [qsTr("固件文件 (*.bin)"), qsTr("所有文件 (*)")]
-        // 默认打开上次所在目录（没选过则用系统默认目录）
-        folder: root.lastFirmwareDir
+        folder: root.lastUpgradeDir !== "" ? ("file:///" + root.lastUpgradeDir.replace(/\\/g, "/")) : shortcuts.home
+
         onAccepted: {
-            var urls = fwFileDialog.files;
             var paths = [];
-            for (var i = 0; i < urls.length; i++) {
-                var s = urls[i].toString();
-                paths.push(s.replace(/^file:\/{3}/, ""));
-            }
-            root.fwFilePaths = paths;
-            // 多个文件用 “;” 分隔显示
-            fwFilePathInput.text = paths.join("; ");
-            // 记住本次所在目录（取最后一个文件所在目录），下次打开时默认进入
-            if (paths.length > 0) {
-                var last = urls[urls.length - 1].toString();
-                root.lastFirmwareDir = last.substring(0, last.lastIndexOf("/"));
-            }
-            console.log(qsTr("固件升级-选择升级文件(%1个): ").arg(paths.length) + paths.join(" | "));
+            for (var i = 0; i < upgradeFileDialog.fileUrls.length; i++)
+                paths.push(root.urlToLocalPath(upgradeFileDialog.fileUrls[i]));
+
+            root.upgradeFiles = paths;
+            // 记住本次所在目录，下次打开时自动定位
+            if (paths.length > 0)
+                ConfigureManager.upgradeDir = root.pathDirName(paths[0]);
+
+            root.logAction(qsTr("已选择升级文件: %1").arg(root.upgradeFileSummary()));
         }
     }
 
@@ -894,5 +1040,82 @@ ApplicationWindow {
     OtherSettingsDialog {
         id: otherSettingsDialog
         sharedOsd: osdConfig
+    }
+
+    // ===== 设备搜索遮罩 =====
+    // 搜索期间覆盖整个窗口（黑底 50% 透明），并吞掉鼠标事件避免误点其它按钮；
+    // 搜索结束（DeviceScanner.searchFinished -> root.searching = false）后自动消失
+    Item {
+        anchors.fill: parent
+        z: 100
+        visible: root.searching
+
+        Rectangle {
+            anchors.fill: parent
+            color: "black"
+            opacity: 0.5
+        }
+
+        // 吞掉鼠标事件：Label 不接收鼠标，点击会落到本层被拦截
+        MouseArea {
+            anchors.fill: parent
+        }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: ScreenTools.scaleNum(12)
+
+            // 转圈等待动画：蓝 -> 浅蓝渐变，顺时针匀速旋转
+            Canvas {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: ScreenTools.scaleNum(48)
+                height: ScreenTools.scaleNum(48)
+                antialiasing: true
+
+                readonly property color cStart: "#2f6fed" // 蓝
+                readonly property color cEnd: "#9ed0ff" // 浅蓝
+                readonly property int segments: 24 // 分段数，越多渐变越平滑
+                readonly property real sweepDeg: 300 // 留一段缺口更像转圈
+                readonly property real lineWidth: ScreenTools.scaleNum(4)
+
+                // 逐段画圆弧并按序号插值上色，形成沿弧线的渐变
+                onPaint: {
+                    var ctx = getContext("2d");
+                    ctx.reset();
+                    ctx.lineWidth = lineWidth;
+                    ctx.lineCap = "round";
+                    var cx = width / 2;
+                    var cy = height / 2;
+                    var r = (Math.min(width, height) - lineWidth) / 2;
+                    var step = (sweepDeg / segments) * Math.PI / 180;
+                    var from = -Math.PI / 2; // 12 点方向起笔
+                    for (var i = 0; i < segments; i++) {
+                        var t = i / (segments - 1);
+                        ctx.strokeStyle = Qt.rgba(cStart.r + (cEnd.r - cStart.r) * t, cStart.g + (cEnd.g - cStart.g) * t, cStart.b + (cEnd.b - cStart.b) * t, 1).toString();
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, r, from + i * step, from + (i + 1) * step);
+                        ctx.stroke();
+                    }
+                }
+                Component.onCompleted: requestPaint()
+
+                // 中等转速：1.2 秒一圈；搜索结束自动停转
+                RotationAnimation on rotation {
+                    from: 0
+                    to: 360
+                    duration: 1200
+                    loops: Animation.Infinite
+                    running: root.searching
+                }
+            }
+
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("设备搜索中...")
+                color: "white"
+                font.family: "Microsoft YaHei"
+                font.pointSize: ScreenTools.scaleNum(12, true)
+            }
+        }
     }
 }

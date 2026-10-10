@@ -1,4 +1,4 @@
-﻿/*********************************************************************
+/*********************************************************************
 File : ConfigureManager.h
 Module : tools
 Authors: guangnan
@@ -23,6 +23,8 @@ class ConfigureManager : public QObject {
     Q_PROPERTY(bool hasSetLanguage READ isHasSetLanguage NOTIFY languageTypeChanged)
     // 上次选择的网卡名（持久化到本地 ini，选中“所有网卡”时写入 "All netCard"）
     Q_PROPERTY(QString networkCard READ networkCard WRITE setNetworkCard NOTIFY networkCardChanged)
+    // 上次打开“升级文件”选择框时所在的目录（持久化到本地 ini，供下次打开时默认定位）
+    Q_PROPERTY(QString upgradeDir READ upgradeDir WRITE setUpgradeDir NOTIFY upgradeDirChanged)
 
   public:
     ~ConfigureManager();
@@ -50,13 +52,25 @@ class ConfigureManager : public QObject {
     QString networkCard() const;
     void    setNetworkCard(const QString& name);
 
+    // 上次选择的升级文件目录（本地路径，如 "C:/Firmware"）；为空表示还没选过
+    QString upgradeDir() const;
+    void    setUpgradeDir(const QString& dir);
+
   signals:
     void settingFilePathChanged();
     void languageTypeChanged();
     void networkCardChanged();
+    void upgradeDirChanged();
 
   private:
     explicit ConfigureManager(QObject* parent = nullptr);
+    void init();
+    bool QueryValue(const std::string& ValueName, const std::string& szModuleName, std::string& RetStr);
+    // 递归把 JSON 对象里的所有值重置为类型对应的零值
+    bool resetJsonObjValue(QJsonObject& rootObj);
+    // 初始化（并按需创建）程序目录下的工作目录
+    void    initAppDir();
+    QString getAppDir(const EnumNameSpace::AppDir& cmd);
 
   private:
     static ConfigureManager* m_instance;
@@ -64,3 +78,5 @@ class ConfigureManager : public QObject {
 
     QString m_settingFilePath;
 };
+
+#define CONFIGUREMANAGER_INSTANCE ConfigureManager::instance()

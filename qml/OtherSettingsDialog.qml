@@ -297,56 +297,19 @@ Dialog {
         ctrlHeight: root.ctrlH
     }
 
-    // 密码输入框（AppTextField 基于 TextArea，不支持 echoMode 掩码，密码输入用 TextField）
-    component PwdInput: TextField {
-        id: pwdControl
+    // 密码输入框：复用统一封装的 AppPasswordField
+    // （AppTextField 基于 TextArea，不支持 echoMode 掩码，密码输入用 TextField 实现）
+    component PwdInput: AppPasswordField {
         Layout.minimumHeight: root.ctrlH
-        topPadding: ScreenTools.scaleNum(5)
-        bottomPadding: ScreenTools.scaleNum(5)
-        leftPadding: ScreenTools.scaleNum(8)
-        rightPadding: ScreenTools.scaleNum(8)
-        selectByMouse: true
-        font.family: "Microsoft YaHei"
-        font.pointSize: ScreenTools.scaleNum(10, true)
-        echoMode: TextInput.Password
-        verticalAlignment: TextInput.AlignVCenter
-        background: Rectangle {
-            radius: ScreenTools.scaleNum(4)
-            color: pwdControl.enabled ? "white" : "#f0f0f0"
-            border.width: 1
-            border.color: pwdControl.activeFocus ? "#2f6fed" : "#767676"
-        }
+        Layout.preferredHeight: root.ctrlH
     }
 
-    // 屏蔽 Dialog 默认标题栏，使用与设定IP/OSD修改弹窗一致的样式
-    header: Item {
-        height: ScreenTools.scaleNum(44)
-        Rectangle {
-            anchors.fill: parent
-            color: "#F5F7FA"
-            border.width: 0
-            radius: ScreenTools.scaleNum(4)
-        }
+    // 屏蔽 Dialog 默认标题栏，改用统一封装的标题栏（含关闭按钮）
+    header: AppDialogHeader {
+        title: root.title
+        onClosed: root.reject()
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: ScreenTools.scaleNum(16)
-            anchors.rightMargin: ScreenTools.scaleNum(4)
-
-            Label {
-                Layout.fillWidth: true
-                Layout.preferredHeight: ScreenTools.scaleNum(44)
-                verticalAlignment: Text.AlignVCenter
-                font.bold: true
-                font.pointSize: ScreenTools.scaleNum(12, true)
-                text: root.title
-            }
-            AppCloseButton {
-                onClicked: root.reject()
-            }
-        }
-
-        // 保存成功提示弹窗
+        // 保存成功提示弹窗：放在标题栏容器内，避免进入内容区的布局被 RowLayout 排版
         AppMessageBox {
             id: saveTipBox
         }

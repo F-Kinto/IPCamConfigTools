@@ -96,32 +96,9 @@ Dialog {
     }
 
     // 屏蔽 Dialog 默认标题栏，使用与设定IP弹窗一致的样式
-    header: Item {
-        height: ScreenTools.scaleNum(44)
-        Rectangle {
-            anchors.fill: parent
-            color: "#F5F7FA"
-            border.width: 0
-            radius: ScreenTools.scaleNum(4)
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: ScreenTools.scaleNum(16)
-            anchors.rightMargin: ScreenTools.scaleNum(4)
-
-            Label {
-                Layout.fillWidth: true
-                Layout.preferredHeight: ScreenTools.scaleNum(44)
-                verticalAlignment: Text.AlignVCenter
-                font.bold: true
-                font.pointSize: ScreenTools.scaleNum(12, true)
-                text: root.title
-            }
-            AppCloseButton {
-                onClicked: root.reject()
-            }
-        }
+    header: AppDialogHeader {
+        title: root.title
+        onClosed: root.reject()
     }
     footer: Item {
         height: 0

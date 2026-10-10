@@ -1,4 +1,8 @@
-﻿#pragma execution_character_set("utf-8")
+#pragma execution_character_set("utf-8")
+// QueryValue 用到 Win32 版本信息 API（GetFileVersionInfoA 等），须先于 Qt 头包含
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #include "ConfigureManager.h"
 #include <QFile>
 #include <QFileInfo>
@@ -16,13 +20,23 @@ constexpr char LanguageSetting[] = "AppSettings/Language";
 constexpr char NetworkCardSetting[] = "AppSettings/NetworkCard";
 // 选中“所有网卡”时写入配置文件的内容
 constexpr char AllNetCard[] = "All netCard";
+// 上次打开的“升级文件”目录
+constexpr char UpgradeDirSetting[] = "AppSettings/UpgradeDir";
 
 ConfigureManager* ConfigureManager::m_instance = nullptr;
 QMutex            ConfigureManager::m_lock;
 
-ConfigureManager::ConfigureManager(QObject* parent) : QObject(parent) {}
+ConfigureManager::ConfigureManager(QObject* parent) : QObject(parent)
+{
+    init();
+}
 
 ConfigureManager::~ConfigureManager() {}
+
+void ConfigureManager::init()
+{
+
+}
 
 ConfigureManager* ConfigureManager::instance()
 {
@@ -47,11 +61,110 @@ void ConfigureManager::loadConfigureFile(const QString& configureFilePath)
     emit settingFilePathChanged();
 }
 
+bool ConfigureManager::QueryValue(const std::string& ValueName, const std::string& szModuleName, std::string& RetStr)
+{
+    bool  bSuccess        = FALSE;
+    BYTE* m_lpVersionData = NULL;
+    DWORD m_dwLangCharset = 0;
+    CHAR* tmpstr          = NULL;
+
+    do {
+        if (!ValueName.size() || !szModuleName.size())
+            break;
+
+        DWORD dwHandle;
+
+        DWORD dwDataSize = ::GetFileVersionInfoSizeA((LPCSTR)szModuleName.c_str(), &dwHandle);
+        if (dwDataSize == 0) {
+            dwDataSize = GetLastError();
+            break;
+        }
+
+        m_lpVersionData = new (std::nothrow) BYTE[dwDataSize];
+        if (NULL == m_lpVersionData)
+            break;
+
+        if (!::GetFileVersionInfoA((LPCSTR)szModuleName.c_str(), dwHandle, dwDataSize, (void*)m_lpVersionData))
+            break;
+
+        UINT   nQuerySize;
+        DWORD* pTransTable;
+
+        if (!::VerQueryValueA(m_lpVersionData, "\\VarFileInfo\\Translation", (void**)&pTransTable, &nQuerySize))
+            break;
+
+        m_dwLangCharset = MAKELONG(HIWORD(pTransTable[0]), LOWORD(pTransTable[0]));
+        if (m_lpVersionData == NULL)
+            break;
+
+        tmpstr = new (std::nothrow) CHAR[128];
+        if (NULL == tmpstr)
+            break;
+        sprintf_s(tmpstr, 128, "\\StringFileInfo\\%08lx\\%s", m_dwLangCharset, ValueName.c_str());
+        LPVOID lpData;
+
+        if (::VerQueryValueA((void*)m_lpVersionData, tmpstr, &lpData, &nQuerySize))
+            RetStr = (char*)lpData;
+
+        bSuccess = TRUE;
+    } while (FALSE);
+
+    if (m_lpVersionData) {
+        delete[] m_lpVersionData;
+        m_lpVersionData = NULL;
+    }
+    if (tmpstr) {
+        delete[] tmpstr;
+        tmpstr = NULL;
+    }
+
+    return bSuccess;
+}
+
 qint64 ConfigureManager::getCurrentMSecsSinceEpoch()
 {
     QMutexLocker lock(&m_lock);
-    QDateTime    dateTime = QDateTime::currentDateTime();
-    return dateTime.toMSecsSinceEpoch();
+    QDateTime    dateTime  = QDateTime::currentDateTime();
+    QString      timestamp = dateTime.toString("yyyy-MM-dd hh:mm:ss.zzz");
+    qint64       epochTime = dateTime.toMSecsSinceEpoch();
+    return epochTime;
+}
+
+bool ConfigureManager::resetJsonObjValue(QJsonObject& rootObj)
+{
+    if (rootObj.isEmpty())
+        return false;
+    const auto  keys(rootObj.keys());
+    QJsonObject tempObject;
+    for (const auto& key : keys) {
+        auto value = rootObj[key];
+        switch (value.type()) {
+            case QJsonValue::Bool:
+                tempObject.insert(key, false);
+                break;
+            case QJsonValue::Double:
+                tempObject.insert(key, 0.0);
+                break;
+            case QJsonValue::String:
+                tempObject.insert(key, "");
+                break;
+            case QJsonValue::Array:
+                tempObject.insert(key, QJsonValue(QJsonValue::Array));
+                break;
+            case QJsonValue::Object: {
+                auto childJsonObj = value.toObject();
+                resetJsonObjValue(childJsonObj);
+                tempObject.insert(key, childJsonObj);
+            } break;
+            case QJsonValue::Null:
+            case QJsonValue::Undefined:
+            default:
+                Q_ASSERT(false);
+                break;
+        }
+    }
+    rootObj = tempObject;
+    return true;
 }
 
 QString ConfigureManager::getMACAddrFirst()
@@ -68,6 +181,19 @@ QString ConfigureManager::getMACAddrFirst()
         }
     }
     return strMac;
+}
+
+void ConfigureManager::initAppDir()
+{
+    QDir dir;
+    dir.setPath(qApp->applicationDirPath() + "/" + "TestDir/");
+    if (!dir.exists())
+        dir.mkdir(qApp->applicationDirPath() + "/" + "TestDir/");
+}
+
+QString ConfigureManager::getAppDir(const EnumNameSpace::AppDir& cmd)
+{
+    return qApp->applicationDirPath() + "/" + "TestDir/";
 }
 
 QString ConfigureManager::settingFilePath() const
@@ -143,4 +269,25 @@ void ConfigureManager::setNetworkCard(const QString& name)
     settings.setValue(NetworkCardSetting, newValue);
     settings.sync();
     emit networkCardChanged();
+}
+
+QString ConfigureManager::upgradeDir() const
+{
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
+    settings.setIniCodec("UTF-8");
+    // 没选过时返回空串，由调用方决定默认目录
+    return settings.value(UpgradeDirSetting, QString()).toString();
+}
+
+void ConfigureManager::setUpgradeDir(const QString& dir)
+{
+    const QString newValue = dir.trimmed();
+    if (upgradeDir() == newValue)
+        return;
+
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
+    settings.setIniCodec("UTF-8");
+    settings.setValue(UpgradeDirSetting, newValue);
+    settings.sync();
+    emit upgradeDirChanged();
 }

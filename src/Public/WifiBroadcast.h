@@ -13,6 +13,7 @@ guangnan 2023/03/30 1.0.0 build this module
 #include <QThread>
 #include <QUdpSocket>
 #include <QTimer>
+#include <QString>
 
 /**
  * @brief 结构体用于存储IP摄像头广播发现的信息
@@ -80,6 +81,12 @@ class COMMON_EXPORT WifiBroadcast : public QObject {
      */
     void slotSendBroadcast(const bool& isSend, const int& intervel);
 
+    /**
+     * @brief 设置本次扫描的目标网卡（由调用方通过信号跨线程触发，在工作线程内执行）
+     * @param nicName 网卡可读名 / 网卡名 / 网卡上的 IPv4 地址；传空串表示不限制（广播所有网卡网段）
+     */
+    void slotSetTargetNic(const QString& nicName);
+
   private slots:
     /**
      * @brief 内部槽函数：启动广播线程或相关逻辑
@@ -107,4 +114,5 @@ class COMMON_EXPORT WifiBroadcast : public QObject {
     // QUdpSocket is a Qt wrapper for UDP sockets used for network communication (receiving and sending packets). It broadcasts requests to find devices and receives responses from other devices.
     QUdpSocket* m_udpSocket; /**< UDP套接字指针，用于网络通信 */
     QTimer*     m_timer;     /**< 定时器指针，用于控制广播频率 */
+    QString     m_targetNic; /**< 目标网卡：非空时只向该网卡所在网段发广播 */
 };

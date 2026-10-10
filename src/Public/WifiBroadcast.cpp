@@ -1,6 +1,31 @@
 #include "WifiBroadcast.h"
 #include <QNetworkInterface>
 
+namespace {
+/**
+ * @brief 判断网卡是否为本次扫描的目标网卡
+ * @param netInterface 待判断的网卡
+ * @param target 目标标识：网卡可读名（如 "以太网"）/ 网卡名（如 "{xxxx-xxxx}"）/ 该网卡上的 IPv4 地址
+ * @return true 表示匹配
+ */
+bool interfaceMatchesTarget(const QNetworkInterface& netInterface, const QString& target)
+{
+    // 未指定目标时匹配所有网卡
+    if (target.isEmpty())
+        return true;
+
+    if (netInterface.name() == target || netInterface.humanReadableName() == target)
+        return true;
+
+    // 也允许用该网卡上的 IP 指定（界面上更容易拿到）
+    for (const QNetworkAddressEntry& entry : netInterface.addressEntries()) {
+        if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol && entry.ip().toString() == target)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
 /**
  * @brief 构造函数，初始化 WifiBroadcast 对象并启动工作线程。
  *
@@ -48,6 +73,10 @@ WifiBroadcast::~WifiBroadcast()
  */
 void WifiBroadcast::slotSendBroadcast(const bool& isSend, const int& intervel)
 {
+    // 线程刚起来、套接字/定时器尚未创建时直接忽略，避免空指针
+    if (!m_udpSocket || !m_timer)
+        return;
+
     if (isSend) {
         // Scan immediately
         slotInterSendBroadcast();
@@ -147,7 +176,21 @@ void WifiBroadcast::finish()
         disconnect(m_timer, &QTimer::timeout, this, &WifiBroadcast::slotInterSendBroadcast);
         m_timer->stop();
         m_timer->deleteLater();
+        // 置空，避免线程结束后再被 start()/stop() 用到悬空指针
+        m_timer = nullptr;
     }
+}
+
+/**
+ * @brief 槽函数：设置本次扫描的目标网卡。
+ *
+ * 只在工作线程（m_thread）中修改成员，调用方应通过信号跨线程触发，避免多线程写冲突。
+ *
+ * @param nicName 网卡可读名 / 网卡名 / 网卡 IPv4，空串表示不限制。
+ */
+void WifiBroadcast::slotSetTargetNic(const QString& nicName)
+{
+    m_targetNic = nicName;
 }
 
 /**
@@ -211,6 +254,11 @@ void WifiBroadcast::slotInterSendBroadcast()
             continue;
         }
 
+        // 只扫描调用方指定的网卡网段（m_targetNic 为空时广播所有网卡网段）
+        if (!interfaceMatchesTarget(netInterface, m_targetNic)) {
+            continue;
+        }
+
         // Get all IPs under this network interface card. A network interface card may have multiple IPs/network segments (e.g., multiple addresses configured on the same card, virtual network
         // segments, etc.), so it is necessary to iterate through each entry.
         QList<QNetworkAddressEntry> entryList = netInterface.addressEntries();
@@ -246,6 +294,11 @@ void WifiBroadcast::slotInterSendBroadcast()
         }
         // ---Invalid code end---
     }
+
+    // 指定了网卡时不再发多播：多播由操作系统按默认路由从某张网卡发出，
+    // 可能走到其它网段，与“只扫选中网卡网段”的诉求不符
+    if (!m_targetNic.isEmpty())
+        return;
 
     // Send the multicast one last time
     // Destination address = 234.235.236.237 (multicast address)
