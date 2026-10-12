@@ -7,11 +7,15 @@ import IPCam.Public 1.0
 // 2) 输满 3 位数字时自动跳到下一段（并全选）
 // 3) 一位/两位数字时，可通过左右方向键在段之间跳转，跳转后全选当前段内容
 // 4) 失焦时留空的段补 0
+// 5) value 为双向属性：外部赋值填充 4 段；段内容变化也会实时拼接写回 value
+//    （正在编辑的段允许为空的中间态，取补 0 后的完整地址请用 text()）
 Rectangle {
     id: root
 
     // 点分十进制字符串，外部赋值即可填充 4 个输入框
     property string value: ""
+    // 双向同步保护：外部 value 填充 4 段期间，屏蔽"段内容变化写回 value"的回流，避免互相触发
+    property bool syncing: false
     // 统一控件高度
     property int ctrlHeight: ScreenTools.scaleNum(30)
 
@@ -24,6 +28,11 @@ Rectangle {
 
         }
         return parts.join(".");
+    }
+
+    // 拼接 4 段为点分字符串：空段保留空（写回 value 用，避免把正在编辑的段强行补 0）
+    function rawText() {
+        return [e0.text, e1.text, e2.text, e3.text].join(".");
     }
 
     // 按序号取段输入框
@@ -49,11 +58,17 @@ Rectangle {
     border.width: 1
     border.color: e0.activeFocus || e1.activeFocus || e2.activeFocus || e3.activeFocus ? "#2f6fed" : "#DCDCDC"
     onValueChanged: {
+        // 段内容写回 value 时会再次进入这里，直接跳过（此时 4 段已是最新内容）
+        if (root.syncing)
+            return ;
+
+        root.syncing = true;
         var parts = value.split(".");
         e0.text = parts.length > 0 ? parts[0] : "";
         e1.text = parts.length > 1 ? parts[1] : "";
         e2.text = parts.length > 2 ? parts[2] : "";
         e3.text = parts.length > 3 ? parts[3] : "";
+        root.syncing = false;
     }
 
     Row {
@@ -180,6 +195,16 @@ Rectangle {
             if (text.length === 3)
                 jumpTo(1);
 
+        }
+        // 任一段内容变化（输入 / 方向键调整 / 失焦补 0）都把 4 段实时拼接写回 root.value
+        // （syncing 期间是外部 value 在填充 4 段，跳过以免互相触发）
+        onTextChanged: {
+            if (root.syncing)
+                return ;
+
+            var t = root.rawText();
+            if (t !== root.value)
+                root.value = t;
         }
         // 按键统一在 onPressed 里处理。
         // 注意：QKeyEvent 默认 accepted=true，挂在 Keys 上的处理器若不显式放行

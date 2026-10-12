@@ -228,6 +228,29 @@ ApplicationWindow {
         return true;
     }
 
+    // 双击表格某行：直接播放该行设备（无需先勾选），与已播列表按设备去重合并，
+    // 合并后超过“最多 4 路”上限时弹窗提示，播放列表保持原样
+    function openLivePreviewOfRow(row) {
+        if (row < 0 || row >= deviceModel.rowCount)
+            return ;
+
+        var dev = deviceModel.rows[row];
+        if (dev === undefined)
+            return ;
+
+        var playing = root.previewOpen ? livePreviewPage.devices : [];
+        var merged = root.mergeLiveDevices(playing, [dev]);
+        if (merged.length > root.maxLiveCount) {
+            tipBox.show(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
+            root.logAction(qsTr("双击播放失败: 已播放%1台，超出上限%2台").arg(playing.length).arg(root.maxLiveCount));
+            return ;
+        }
+        root.previewOpen = true;
+        root.currentPage = 1;
+        livePreviewPage.devices = merged;
+        root.logAction(qsTr("双击播放直播: %1").arg(dev["ip"]));
+    }
+
     // 关闭直播预览页：回到设备列表并清空播放列表（页签栏随之隐藏）
     function closeLivePreview() {
         // 关闭全屏画面（若正开着），再隐藏页签栏
@@ -387,6 +410,48 @@ ApplicationWindow {
         return true;
     }
 
+    // ===== “执行修改（设定IP）”：按勾选数量给勾选设备下发新 IP =====
+    // 正在异步分配空闲 IP：true 时全窗口显示“正在分配空闲IP...”遮罩
+    property bool ipAllocating: false
+    // 本次分配请求的起始 IP：响应靠它匹配，防止过期响应串扰
+    property string ipAllocatingBaseIp: ""
+
+    // 下发修改 IP 请求：勾选设备（uid 升序，与 ips 下标一一配对）
+    // TODO: 接入真实下发协议（当前先记日志记录配对结果，设备响应后由后续版本处理）
+    function sendSetIpRequests(ips) {
+        // DeviceManager 已随勾选变化实时同步（onSelectedRowsChanged），
+        // checkedDevices() 按 uid 升序返回，与 C++ keyOf 的 uid 取值一致
+        var devices = DeviceManager.checkedDevices();
+        for (var i = 0; i < devices.length; i++) {
+            var id = devices[i]["uid"] || devices[i]["cloudId"] || devices[i]["mac"] || devices[i]["ip"] || "";
+            root.logAction(qsTr("发送修改IP请求: 设备ID=%1, 新IP=%2").arg(id).arg(ips[i]));
+        }
+    }
+
+    // “执行修改”点击入口：没勾选提示；1 台直接下发弹窗保存的 IP；
+    // 多台从该 IP 起凑等量空闲 IP（末段叠加到 .254，不足再递减到 .1）后逐台下发
+    function executeSetIp() {
+        if (!root.ensureDeviceSelected())
+            return ;
+        // IP 来源：设定IP弹窗“确定”时已探测空闲并保存的参数
+        if (setIpDialog.savedParams === null) {
+            tipBox.show(qsTr("温馨提示"), qsTr("请先在[设定IP]中设定IP地址"));
+            return ;
+        }
+
+        var baseIp = setIpDialog.savedParams["ip"];
+        if (root.selectedCount === 1) {
+            // 单台：直接发送该设备 id 与设定IP里的地址
+            root.sendSetIpRequests([baseIp]);
+            tipBox.show(qsTr("温馨提示"), qsTr("修改IP地址请求已发送, 请等待设备响应"));
+        } else {
+            // 多台：先开遮罩再异步凑空闲 IP，结果在 Connections 的 onSignalFreeIpsFound 处理
+            root.ipAllocatingBaseIp = baseIp;
+            root.ipAllocating = true;
+            ScreenTools.findFreeIpsAsync(baseIp, root.selectedCount);
+        }
+    }
+
     // 勾选的行号一变就同步一次（单个勾选 / 全选 / 反选 / 清空都走这里）
     onSelectedRowsChanged: root.syncCheckedDevices()
     width: ScreenTools.scaleNum(1200)
@@ -419,6 +484,27 @@ ApplicationWindow {
         }
 
         target: DeviceScanner
+    }
+
+    // “执行修改（设定IP）”勾选多台时 findFreeIpsAsync 的结果：凑满等量空闲 IP 后逐台配对下发
+    Connections {
+        function onSignalFreeIpsFound(baseIp, wanted, freeIps) {
+            if (!root.ipAllocating || baseIp !== root.ipAllocatingBaseIp)
+                return ;
+
+            root.ipAllocating = false;
+            root.ipAllocatingBaseIp = "";
+            if (freeIps.length < wanted) {
+                // 网段内空闲 IP 不够：提示后中断，可换起始 IP 重试
+                tipBox.show(qsTr("温馨提示"), qsTr("网段内空闲IP不足(需%1个, 只找到%2个), 请调整起始IP").arg(wanted).arg(freeIps.length));
+                return ;
+            }
+            // 勾选行（表格顺序）与空闲 IP（发现顺序）一一配对下发
+            root.sendSetIpRequests(freeIps);
+            tipBox.show(qsTr("温馨提示"), qsTr("批量修改IP请求已发送, 请等待设备响应"));
+        }
+
+        target: ScreenTools
     }
 
     // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的“当前设备”
@@ -618,8 +704,8 @@ ApplicationWindow {
                                 Item {
                                     id: closeGlyph
 
-                                    width: ScreenTools.scaleNum(14)
-                                    height: ScreenTools.scaleNum(14)
+                                    width: ScreenTools.scaleNum(16)
+                                    height: ScreenTools.scaleNum(16)
                                     anchors.right: parent.right
                                     anchors.rightMargin: ScreenTools.scaleNum(8)
                                     anchors.verticalCenter: parent.verticalCenter
@@ -627,13 +713,13 @@ ApplicationWindow {
                                     Text {
                                         anchors.centerIn: parent
                                         color: closeArea.containsMouse ? "#FFFFFF" : "#8A9099"
-                                        font.pointSize: ScreenTools.scaleNum(9, true)
+                                        font.pointSize: ScreenTools.scaleNum(10, true)
                                         text: "\u2715"
                                     }
 
                                     Rectangle {
                                         anchors.fill: parent
-                                        radius: ScreenTools.scaleNum(7)
+                                        radius: closeGlyph.height / 2
                                         color: closeArea.containsMouse ? "#FF4A4A" : "transparent"
                                         z: -1
                                     }
@@ -685,6 +771,8 @@ ApplicationWindow {
                                 checkBoxColumn: 0
                                 checkedRows: root.selectedRows
                                 onRowChecked: root.setRowChecked(row, checked)
+                                // 双击某行：直接播放该行设备（切到“直播预览”页签）
+                                onRowDoubleClicked: root.openLivePreviewOfRow(row)
                                 // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
                                 columnRoles: ["ip", "cloudId", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
                                 // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
@@ -791,7 +879,7 @@ ApplicationWindow {
                             text: qsTr("执行修改")
                             onClicked: {
                                 root.logAction(qsTr("我点击了%1按钮（设定IP）").arg(text));
-                                root.ensureDeviceSelected();
+                                root.executeSetIp();
                             }
                         }
 
@@ -1233,7 +1321,10 @@ ApplicationWindow {
                 text: qsTr("保存")
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 highlighted: true
-                onClicked: root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
+                onClicked: {
+                    root.searchSeconds = searchTimeSpin.displayText
+                    root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
+                }
             }
 
         }
@@ -1272,6 +1363,23 @@ ApplicationWindow {
         id: setIpDialog
     }
 
+    // ===== 设定IP弹窗的探测遮罩 =====
+    // 点“确定”后异步探测 IP 占用期间，盖住整个弹窗（含标题栏与关闭按钮）并吞掉鼠标事件。
+    // 必须声明在 window 层：Dialog 声明内的普通 Item 会被 Popup 的 contentData 机制收编进
+    // contentItem，parent: Overlay.overlay 无法可靠生效；window 子项上下文中 Overlay.overlay
+    // 可立即解析。遮罩与弹窗同在 Overlay 层、同样居中、尺寸跟随弹窗，z 抬高即盖住全部内容
+    AppBusyMask {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: setIpDialog.width
+        height: setIpDialog.height
+        // 抬高层级盖住 Overlay 里弹窗的全部内容（标题栏/内容/按钮）
+        z: 1000
+        // 弹窗关闭后即使 showMask 残留也不显示（弹窗 onAboutToShow 里已复位）
+        busy: setIpDialog.showMask && setIpDialog.visible
+        text: qsTr("正在查询IP占用状态...")
+    }
+
     // ===== OSD参数共享存储：“OSD修改”弹窗 与 “其它设置-OSD设置”页共用同一份已保存参数 =====
     // 只存两个界面都有的项；saved 表示是否被保存过（未保存过时两侧各用默认值）
     QtObject {
@@ -1301,82 +1409,23 @@ ApplicationWindow {
     }
 
     // ===== 设备搜索遮罩 =====
-    // 搜索期间覆盖整个窗口（黑底 50% 透明），并吞掉鼠标事件避免误点其它按钮；
+    // 搜索期间覆盖整个窗口并吞掉鼠标事件，避免误点其它按钮；
     // 搜索结束（DeviceScanner.searchFinished -> root.searching = false）后自动消失
-    Item {
+    AppBusyMask {
         anchors.fill: parent
         z: 100
-        visible: root.searching
+        busy: root.searching
+        text: qsTr("设备搜索中...")
+    }
 
-        Rectangle {
-            anchors.fill: parent
-            color: "black"
-            opacity: 0.5
-        }
-
-        // 吞掉鼠标事件：Label 不接收鼠标，点击会落到本层被拦截
-        MouseArea {
-            anchors.fill: parent
-        }
-
-        Column {
-            anchors.centerIn: parent
-            spacing: ScreenTools.scaleNum(12)
-
-            // 转圈等待动画：蓝 -> 浅蓝渐变，顺时针匀速旋转
-            Canvas {
-                readonly property color cStart: "#2f6fed" // 蓝
-                readonly property color cEnd: "#9ed0ff" // 浅蓝
-                readonly property int segments: 24 // 分段数，越多渐变越平滑
-                readonly property real sweepDeg: 300 // 留一段缺口更像转圈
-                readonly property real lineWidth: ScreenTools.scaleNum(4)
-
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: ScreenTools.scaleNum(48)
-                height: ScreenTools.scaleNum(48)
-                antialiasing: true
-                // 逐段画圆弧并按序号插值上色，形成沿弧线的渐变
-                onPaint: {
-                    var ctx = getContext("2d");
-                    ctx.reset();
-                    ctx.lineWidth = lineWidth;
-                    ctx.lineCap = "round";
-                    var cx = width / 2;
-                    var cy = height / 2;
-                    var r = (Math.min(width, height) - lineWidth) / 2;
-                    var step = (sweepDeg / segments) * Math.PI / 180;
-                    var from = -Math.PI / 2; // 12 点方向起笔
-                    for (var i = 0; i < segments; i++) {
-                        var t = i / (segments - 1);
-                        ctx.strokeStyle = Qt.rgba(cStart.r + (cEnd.r - cStart.r) * t, cStart.g + (cEnd.g - cStart.g) * t, cStart.b + (cEnd.b - cStart.b) * t, 1).toString();
-                        ctx.beginPath();
-                        ctx.arc(cx, cy, r, from + i * step, from + (i + 1) * step);
-                        ctx.stroke();
-                    }
-                }
-                Component.onCompleted: requestPaint()
-
-                // 中等转速：1.2 秒一圈；搜索结束自动停转
-                RotationAnimation on rotation {
-                    from: 0
-                    to: 360
-                    duration: 1200
-                    loops: Animation.Infinite
-                    running: root.searching
-                }
-
-            }
-
-            Label {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("设备搜索中...")
-                color: "white"
-                font.family: "Microsoft YaHei"
-                font.pointSize: ScreenTools.scaleNum(12, true)
-            }
-
-        }
-
+    // ===== 执行修改（设定IP）的分配遮罩 =====
+    // 勾选多台点“执行修改”后异步凑空闲 IP 期间，覆盖整个窗口并吞掉鼠标事件；
+    // 结果回来（ScreenTools.signalFreeIpsFound -> root.ipAllocating = false）后自动消失
+    AppBusyMask {
+        anchors.fill: parent
+        z: 100
+        busy: root.ipAllocating
+        text: qsTr("正在分配空闲IP...")
     }
 
 }

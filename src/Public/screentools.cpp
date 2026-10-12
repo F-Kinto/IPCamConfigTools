@@ -1,6 +1,7 @@
 #include "screentools.h"
 #include "Log4qt/QALogmanger.h"
 #include <cmath>
+#include <thread>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <Windows.h>
@@ -323,6 +324,107 @@ QStringList ScreenTools::getNetworkInterfaceNames(bool onlyUp)
     }
 
     return names;
+}
+
+// 文件内静态探测函数：isIpOccupied（同步版）与 checkIpOccupiedAsync（异步版）共用
+static bool probeIpOccupied(const QString& ip)
+{
+    // 解析 IPv4 字符串，非法地址直接判为空闲并告警
+    in_addr addr;
+    if (::inet_pton(AF_INET, ip.toStdString().c_str(), &addr) != 1) {
+        qWarning() << "probeIpOccupied: invalid IPv4 address:" << ip;
+        return false;
+    }
+
+    // SendARP：有人应答则返回 NO_ERROR 并写入对方 MAC（IPAddr 即网络字节序 ULONG）
+    ULONG macAddr[2] = {0}; // MAC 共 6 字节，用 2 个 ULONG 承载
+    ULONG macLen     = sizeof(macAddr);
+    return ::SendARP(static_cast<IPAddr>(addr.s_addr), 0, macAddr, &macLen) == NO_ERROR;
+}
+
+/**
+ * @brief 通过 SendArp 判断指定 IPv4 地址是否被占用
+ *
+ * 向目标 IP 发送 ARP 请求：
+ *  - 目标主机在线应答：SendArp 返回 NO_ERROR 并带回其 MAC 地址 → 该 IP 已被占用
+ *  - 无人应答：SendArp 返回错误码（如 31 ERROR_GEN_FAILURE）→ 该 IP 空闲
+ *
+ * 目标是本机 IP 时也会带回本机 MAC（NO_ERROR），适用于检测 IP 冲突。
+ * 注意：ARP 仅在本地网段内生效，跨网段地址会因路由不可达而判为空闲。
+ *
+ * @param ip IPv4 地址字符串，如 "192.168.1.100"
+ * @return true = 被占用；false = 空闲（或 IP 格式非法，此时打印告警）
+ */
+bool ScreenTools::isIpOccupied(const QString& ip)
+{
+    return probeIpOccupied(ip);
+}
+
+/**
+ * @brief 异步探测 IPv4 占用状态（不阻塞 UI 线程）
+ *
+ * SendARP 是同步阻塞调用（无人应答时会等待较久），直接在 QML 里调用会
+ * 冻结界面与动画。此接口把探测放到 std::thread 后台执行，结果经
+ * signalIpOccupied 信号回传：
+ *   - 跨线程 emit：接收方在主线程时 Qt 自动以排队连接投递，槽/QML 处理仍回到主线程
+ *   - 请求/响应靠 ip 字符串匹配，调用方应保存请求地址，回调时核对后再处理
+ *
+ * @param ip IPv4 地址字符串，如 "192.168.1.100"
+ */
+void ScreenTools::checkIpOccupiedAsync(const QString& ip)
+{
+    // 值拷贝进线程，避免引用外部字符串的生命周期问题
+    QString ipCopy = ip;
+    std::thread([this, ipCopy]() {
+        bool occupied = probeIpOccupied(ipCopy);
+        emit signalIpOccupied(ipCopy, occupied);
+    }).detach();
+}
+
+/**
+ * @brief 异步批量查找空闲 IP（不阻塞 UI 线程）
+ *
+ * 以 baseIp 为起点在其所在网段内按序探测，凑满 count 个空闲地址即止：
+ *   1) 末段从 baseIp 的末段起逐个 +1 叠加，跳过被占用（ARP 有人应答）的地址，
+ *      一直叠加到 .254（.255 为广播地址不参与）；
+ *   2) 到 .254 仍不足 count 个，再从 baseIp 末段的下方逐个 -1 递减探测，直到 .1；
+ *   3) 两条路都穷尽仍不足，返回已找到的部分（freeIps.size() < wanted）。
+ *
+ * 探测在线程内串行执行（每个 SendARP 无人应答时约百毫秒级），期间界面由调用方
+ * 的遮罩提示等待。结果经 signalFreeIpsFound 回传，请求/响应靠 baseIp 字符串匹配，
+ * 调用方应保存请求地址，回调时核对后再处理。
+ *
+ * @param baseIp 起始 IPv4 地址字符串，如 "192.168.5.193"（格式非法时回传空列表）
+ * @param count  需要的空闲地址数量（<= 0 时回传空列表）
+ */
+void ScreenTools::findFreeIpsAsync(const QString& baseIp, int count)
+{
+    QString ipCopy = baseIp;
+    std::thread([this, ipCopy, count]() {
+        QStringList freeIps;
+        int lastIdx = ipCopy.lastIndexOf('.');
+        int start   = -1;
+        if (lastIdx > 0 && count > 0)
+            start = ipCopy.mid(lastIdx + 1).toInt();
+
+        // 起始末段合法（1~254）才进入查找：.0 是网络地址、.255 是广播地址，不参与叠加
+        if (lastIdx > 0 && count > 0 && start >= 1 && start <= 254) {
+            const QString prefix = ipCopy.left(lastIdx + 1); // "a.b.c."
+            // 升序：起始末段 .. 254
+            for (int last = start; last <= 254 && freeIps.size() < count; ++last) {
+                QString ip = prefix + QString::number(last);
+                if (!probeIpOccupied(ip))
+                    freeIps << ip;
+            }
+            // 降序：起始末段-1 .. 1（升序已穷尽还不够时才走这里）
+            for (int last = start - 1; last >= 1 && freeIps.size() < count; --last) {
+                QString ip = prefix + QString::number(last);
+                if (!probeIpOccupied(ip))
+                    freeIps << ip;
+            }
+        }
+        emit signalFreeIpsFound(ipCopy, count, freeIps);
+    }).detach();
 }
 
 bool ScreenTools::imageIsSvgSource(const QString& imageUrl)

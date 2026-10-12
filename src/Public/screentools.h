@@ -44,7 +44,6 @@ class ScreenTools : public QObject {
     inline void                setFontFamily(const QString& f);
     Q_INVOKABLE qreal          getCurrentDevicePixelRatio() const;
     Q_INVOKABLE qreal          getDevicePixelRatio() const;
-    inline const bool&         isTestServer() const;
     inline const qreal&        mbxPixelRatio() const;
     inline const qreal&        realMbxPixelRatio() const;
     Q_INVOKABLE static QString getLocalIpv4Address();
@@ -64,6 +63,13 @@ class ScreenTools : public QObject {
     Q_INVOKABLE static QString getFormatString(const QString& str, int width, int fontSize = scaleNum(10, true), bool isBold = false);
     Q_INVOKABLE static int     scaleNum(int originValue = 10, bool isFont = false);
     Q_INVOKABLE static bool    imageIsSvgSource(const QString& imageUrl);
+    // 通过 SendArp 判断 IPv4 是否被占用：true=已占用，false=空闲（详见 cpp 注释）
+    Q_INVOKABLE static bool    isIpOccupied(const QString& ip);
+    // 异步探测 IP 占用：不阻塞 UI 线程，结果经 signalIpOccupied 信号回传（详见 cpp 注释）
+    Q_INVOKABLE void           checkIpOccupiedAsync(const QString& ip);
+    // 异步批量查找空闲 IP：从 baseIp 末段起向上叠加到 .254，不足再从其下方递减到 .1，
+    // 跳过被占用的地址，凑满 count 个即止；结果经 signalFreeIpsFound 信号回传（详见 cpp 注释）
+    Q_INVOKABLE void           findFreeIpsAsync(const QString& baseIp, int count);
 
     bool                getOutOfScreen();
     const bool&         outOfScreen() const;
@@ -85,6 +91,11 @@ class ScreenTools : public QObject {
     void signalScreenHeightChanged();
     void signalRectWidthScaleChanged();
     void signalRectHeightScaleChanged();
+    // checkIpOccupiedAsync 的探测结果：ip 为请求的地址，occupied=true 表示已被占用
+    void signalIpOccupied(const QString& ip, bool occupied);
+    // findFreeIpsAsync 的查找结果：baseIp 为请求的起始地址，wanted 为请求的数量，
+    // freeIps 为按发现顺序排列的空闲地址列表；数量不足 wanted 表示网段内已穷尽
+    void signalFreeIpsFound(const QString& baseIp, int wanted, const QStringList& freeIps);
 
   private:
     explicit ScreenTools(QObject* parent = nullptr);
@@ -156,11 +167,6 @@ class ScreenTools : public QObject {
     qreal m_testScale = 1.0;
     bool  m_isDebug   = false;
 };
-
-/**
- * @brief ScreenTools::isTestServer 获取是否为测试服务器
- * @return 返回一个布尔值的常量引用，表示是否为测试服务器
- */
 
 const qreal& ScreenTools::mbxPixelRatio() const
 {

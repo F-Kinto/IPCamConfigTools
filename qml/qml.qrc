@@ -6,6 +6,7 @@
         <file>OtherSettingsDialog.qml</file>
         <file>LivePreviewPage.qml</file>
         <file>Controls/AppButton.qml</file>
+        <file>Controls/AppBusyMask.qml</file>
         <file>Controls/AppCheckBox.qml</file>
         <file>Controls/AppComboBox.qml</file>
         <file>Controls/AppIpInput.qml</file>

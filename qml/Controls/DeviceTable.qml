@@ -60,7 +60,7 @@ Rectangle {
     // 当前排序列 / 方向（-1 表示未排序）
     property int sortColumn: -1
     property bool sortAscending: true
-    // 当前处于选中状态的单元格（TextEdit，用于双击全选 / 单击取消选中）
+    // 当前处于选中状态的单元格（TextEdit，用于长按拖选 / 单击取消选中）
     property var selectedCell: null
     // 需要显示“复选框 + 文本”的列号（默认 -1 表示不显示）；设备列表传 0，即 IP 列
     property int checkBoxColumn: -1
@@ -83,6 +83,8 @@ Rectangle {
     signal rowsReordered(var indexMap)
     // 行勾选状态变化（参数：行号、是否勾选）
     signal rowChecked(int row, bool checked)
+    // 行被双击（参数：行号）—— 行为由调用方定义（如打开该行设备的直播）
+    signal rowDoubleClicked(int row)
 
     // 指定行是否为当前选中行（空数据占位行时 row 未定义，故需防一手）
     function isCurrentRow(row) {
@@ -156,14 +158,13 @@ Rectangle {
         root.rowsReordered(indexMap);
     }
 
-    // 双击单元格：全选该单元格文本（同时取消其它单元格的选中）
+    // 长按拖选：登记当前选中单元格并聚焦（选中范围由单元格 MouseArea 按拖动逐字符驱动）
     function selectCell(cell) {
         if (root.selectedCell && root.selectedCell !== cell)
             root.selectedCell.deselect();
 
         root.selectedCell = cell;
         cell.forceActiveFocus();
-        cell.selectAll();
     }
 
     // 取消选中（单击其它位置 / 排序 / 数据变化时调用）
@@ -522,7 +523,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.rowHeight
                     readOnly: true
-                    // 不支持鼠标拖选，只能双击整段选中
+                    // 不支持鼠标直接拖选；长按左键后拖动逐字符选中
                     selectByMouse: false
                     // 失去焦点即取消选中，符合“点其它地方就取消”
                     persistentSelection: false
@@ -545,15 +546,59 @@ Rectangle {
                     }
 
                     MouseArea {
+                        id: checkArea
+
                         anchors.fill: parent
                         // 右键只吞掉事件，不弹出菜单
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.IBeamCursor
+                        // 拖动事件不许被 TableView 抢走：按住单元格拖动只用于逐字符选中文本，
+                        // 不再横向拖动表格（查看后面的列请用底部横向滚动条）
+                        preventStealing: true
+                        // 长按选择状态：是否已进入拖选模式、按住时起始字符位置
+                        property bool holding: false
+                        property int selectStartPos: 0
+
+                        // 长按自实现（600ms）：到时进入拖选模式，从按下的字符处建立选择锚点
+                        Timer {
+                            id: checkHoldTimer
+
+                            interval: 600
+                            onTriggered: {
+                                checkArea.holding = true;
+                                root.selectRow(row);
+                                root.selectCell(checkCellText);
+                                checkCellText.select(checkArea.selectStartPos, checkArea.selectStartPos);
+                            }
+                        }
+
+                        onPressed: {
+                            checkArea.holding = false;
+                            if (mouse.button === Qt.LeftButton) {
+                                checkArea.selectStartPos = checkCellText.positionAt(mouse.x, mouse.y);
+                                checkHoldTimer.start();
+                            }
+                        }
+                        // 长按生效后：鼠标经过哪个字符就选到哪里，随拖动逐字符覆盖
+                        onPositionChanged: {
+                            if (!checkArea.holding)
+                                return ;
+
+                            var pos = checkCellText.positionAt(mouse.x, mouse.y);
+                            checkCellText.select(Math.min(checkArea.selectStartPos, pos), Math.max(checkArea.selectStartPos, pos));
+                        }
+                        onReleased: checkHoldTimer.stop()
+                        onCanceled: checkHoldTimer.stop()
                         onDoubleClicked: {
+                            checkHoldTimer.stop();
                             root.selectRow(row);
-                            root.selectCell(checkCellText);
+                            root.rowDoubleClicked(row);
                         }
                         onClicked: {
+                            // 长按松开补发的 click 不处理，避免刚选中的文本被取消
+                            if (checkArea.holding)
+                                return ;
+
                             // 单击选中该行，同时取消单元格文本选中
                             root.selectRow(row);
                             root.deselectAll();
@@ -565,7 +610,7 @@ Rectangle {
 
             }
 
-            // 其它列：只读文本，同样支持双击全选 + Ctrl+C
+            // 其它列：只读文本，同样支持长按拖选 + Ctrl+C
             TextEdit {
                 id: cellText
 
@@ -594,14 +639,58 @@ Rectangle {
                 }
 
                 MouseArea {
+                    id: cellArea
+
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.IBeamCursor
+                    // 拖动事件不许被 TableView 抢走：按住单元格拖动只用于逐字符选中文本，
+                    // 不再横向拖动表格（查看后面的列请用底部横向滚动条）
+                    preventStealing: true
+                    // 长按选择状态：是否已进入拖选模式、按住时起始字符位置
+                    property bool holding: false
+                    property int selectStartPos: 0
+
+                    // 长按自实现（300ms）：到时进入拖选模式，从按下的字符处建立选择锚点
+                    Timer {
+                        id: cellHoldTimer
+
+                        interval: 300
+                        onTriggered: {
+                            cellArea.holding = true;
+                            root.selectRow(row);
+                            root.selectCell(cellText);
+                            cellText.select(cellArea.selectStartPos, cellArea.selectStartPos);
+                        }
+                    }
+
+                    onPressed: {
+                        cellArea.holding = false;
+                        if (mouse.button === Qt.LeftButton) {
+                            cellArea.selectStartPos = cellText.positionAt(mouse.x, mouse.y);
+                            cellHoldTimer.start();
+                        }
+                    }
+                    // 长按生效后：鼠标经过哪个字符就选到哪里，随拖动逐字符覆盖
+                    onPositionChanged: {
+                        if (!cellArea.holding)
+                            return ;
+
+                        var pos = cellText.positionAt(mouse.x, mouse.y);
+                        cellText.select(Math.min(cellArea.selectStartPos, pos), Math.max(cellArea.selectStartPos, pos));
+                    }
+                    onReleased: cellHoldTimer.stop()
+                    onCanceled: cellHoldTimer.stop()
                     onDoubleClicked: {
+                        cellHoldTimer.stop();
                         root.selectRow(row);
-                        root.selectCell(cellText);
+                        root.rowDoubleClicked(row);
                     }
                     onClicked: {
+                        // 长按松开补发的 click 不处理，避免刚选中的文本被取消
+                        if (cellArea.holding)
+                            return ;
+
                         // 单击选中该行，同时取消单元格文本选中
                         root.selectRow(row);
                         root.deselectAll();
