@@ -15,7 +15,6 @@ Button {
     property bool showBorder: true
 
     hoverEnabled: true
-
     // 放在布局中时：最小高度 30（文本换行后自动增高），最小宽度 80
     Layout.minimumHeight: ScreenTools.scaleNum(30)
     Layout.minimumWidth: ScreenTools.scaleNum(80)
@@ -50,6 +49,7 @@ Button {
         color: control.highlighted ? (control.down ? "#003CB8" : "#004EEB") : (control.down ? "#DCE7FB" : (control.hovered ? "#F2F6FE" : "#FFFFFF"))
         border.width: control.showBorder ? 1 : 0
         // 浅灰边框；hover / 按下 / 键盘聚焦时变为蓝色
-        border.color: (control.hovered || control.down) ? "#004EEB" : "#C4C8D0"
+        border.color: (control.hovered || control.down) ? "#004EEB" : "#DCDCDC"
     }
+
 }

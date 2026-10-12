@@ -15,20 +15,13 @@ Rectangle {
     // 统一控件高度
     property int ctrlHeight: ScreenTools.scaleNum(30)
 
-    implicitWidth: ScreenTools.scaleNum(220)
-    implicitHeight: ctrlHeight
-    color: root.enabled ? "#FFFFFF" : "#f0f0f0"
-    radius: ScreenTools.scaleNum(4)
-    // 整体只有这一个边框，视觉上与普通文本框一致
-    border.width: 1
-    border.color: e0.activeFocus || e1.activeFocus || e2.activeFocus || e3.activeFocus ? "#2f6fed" : "#767676"
-
     // 取点分字符串：空段按 0 处理
     function text() {
         var parts = [e0.text, e1.text, e2.text, e3.text];
         for (var i = 0; i < 4; i++) {
             if (parts[i] === "")
                 parts[i] = "0";
+
         }
         return parts.join(".");
     }
@@ -48,6 +41,13 @@ Rectangle {
         }
     }
 
+    implicitWidth: ScreenTools.scaleNum(220)
+    implicitHeight: ctrlHeight
+    color: root.enabled ? "#FFFFFF" : "#f0f0f0"
+    radius: ScreenTools.scaleNum(4)
+    // 整体只有这一个边框，视觉上与普通文本框一致
+    border.width: 1
+    border.color: e0.activeFocus || e1.activeFocus || e2.activeFocus || e3.activeFocus ? "#2f6fed" : "#DCDCDC"
     onValueChanged: {
         var parts = value.split(".");
         e0.text = parts.length > 0 ? parts[0] : "";
@@ -56,29 +56,89 @@ Rectangle {
         e3.text = parts.length > 3 ? parts[3] : "";
     }
 
+    Row {
+        id: segRow
+
+        // 分隔点宽度
+        readonly property int dotWidth: ScreenTools.scaleNum(8)
+        // 4 段等宽：可用宽度减去 3 个分隔点后四等分（不依赖布局引擎的分配策略）
+        readonly property int segWidth: Math.max(ScreenTools.scaleNum(20), (segRow.width - 3 * segRow.dotWidth) / 4)
+
+        anchors.fill: parent
+        anchors.leftMargin: ScreenTools.scaleNum(8)
+        anchors.rightMargin: ScreenTools.scaleNum(8)
+        spacing: 0
+
+        SegField {
+            id: e0
+
+            width: segRow.segWidth
+            height: segRow.height
+            segIndex: 0
+        }
+
+        Label {
+            width: segRow.dotWidth
+            height: segRow.height
+            text: "."
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.family: "Microsoft YaHei"
+            font.pointSize: ScreenTools.scaleNum(10, true)
+        }
+
+        SegField {
+            id: e1
+
+            width: segRow.segWidth
+            height: segRow.height
+            segIndex: 1
+        }
+
+        Label {
+            width: segRow.dotWidth
+            height: segRow.height
+            text: "."
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.family: "Microsoft YaHei"
+            font.pointSize: ScreenTools.scaleNum(10, true)
+        }
+
+        SegField {
+            id: e2
+
+            width: segRow.segWidth
+            height: segRow.height
+            segIndex: 2
+        }
+
+        Label {
+            width: segRow.dotWidth
+            height: segRow.height
+            text: "."
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.family: "Microsoft YaHei"
+            font.pointSize: ScreenTools.scaleNum(10, true)
+        }
+
+        SegField {
+            id: e3
+
+            width: segRow.segWidth
+            height: segRow.height
+            segIndex: 3
+        }
+
+    }
+
     // 单段输入框
     component SegField: TextField {
         id: seg
 
         // 本段序号（0-3）
         property int segIndex: 0
-
-        // 宽度由外层 Row 统一四等分赋值（见下方 segWidth），高度铺满整框
-        padding: 0
-        // 段内文本水平 + 垂直居中
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        selectByMouse: true
-        maximumLength: 3
-        font.family: "Microsoft YaHei"
-        font.pointSize: ScreenTools.scaleNum(10, true)
-        // 只允许数字，最多 3 位；大于 255 的处理在 onTextEdited 中强制改写
-        validator: RegularExpressionValidator {
-            regularExpression: /[0-9]{0,3}/
-        }
-        // 段输入框自身不带边框，整体外观由外层 Rectangle 提供
-        background: Item {
-        }
 
         function jumpTo(offset) {
             var target = root.fieldAt(seg.segIndex + offset);
@@ -89,6 +149,27 @@ Rectangle {
             }
         }
 
+        // Up/Down 方向键调整当前段数值（0-255，越界夹紧）
+        function adjustValue(delta) {
+            var v = (seg.text === "") ? 0 : parseInt(seg.text, 10);
+            if (isNaN(v))
+                v = 0;
+
+            v = Math.min(255, Math.max(0, v + delta));
+            seg.text = String(v);
+            // 改完后全选，便于直接输入覆盖
+            seg.selectAll();
+        }
+
+        // 宽度由外层 Row 统一四等分赋值（见下方 segWidth），高度铺满整框
+        padding: 0
+        // 段内文本水平 + 垂直居中
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        selectByMouse: true
+        maximumLength: 3
+        font.family: "Microsoft YaHei"
+        font.pointSize: ScreenTools.scaleNum(10, true)
         onTextEdited: {
             // 最终输入的数值大于 255 时强制改成 255
             if (text !== "" && parseInt(text, 10) > 255) {
@@ -98,19 +179,8 @@ Rectangle {
             // 满 3 位自动跳到下一段
             if (text.length === 3)
                 jumpTo(1);
-        }
 
-        // Up/Down 方向键调整当前段数值（0-255，越界夹紧）
-        function adjustValue(delta) {
-            var v = (seg.text === "") ? 0 : parseInt(seg.text, 10);
-            if (isNaN(v))
-                v = 0;
-            v = Math.min(255, Math.max(0, v + delta));
-            seg.text = String(v);
-            // 改完后全选，便于直接输入覆盖
-            seg.selectAll();
         }
-
         // 按键统一在 onPressed 里处理。
         // 注意：QKeyEvent 默认 accepted=true，挂在 Keys 上的处理器若不显式放行
         // （event.accepted = false），事件就被 Keys 附加属性拦下，TextField 原生的
@@ -162,72 +232,18 @@ Rectangle {
             // 离开时留空的段补 0
             if (!activeFocus && text === "")
                 text = "0";
+
         }
+
+        // 只允许数字，最多 3 位；大于 255 的处理在 onTextEdited 中强制改写
+        validator: RegularExpressionValidator {
+            regularExpression: /[0-9]{0,3}/
+        }
+
+        // 段输入框自身不带边框，整体外观由外层 Rectangle 提供
+        background: Item {
+        }
+
     }
 
-    Row {
-        id: segRow
-
-        anchors.fill: parent
-        anchors.leftMargin: ScreenTools.scaleNum(8)
-        anchors.rightMargin: ScreenTools.scaleNum(8)
-        spacing: 0
-
-        // 分隔点宽度
-        readonly property int dotWidth: ScreenTools.scaleNum(8)
-        // 4 段等宽：可用宽度减去 3 个分隔点后四等分（不依赖布局引擎的分配策略）
-        readonly property int segWidth: Math.max(ScreenTools.scaleNum(20), (segRow.width - 3 * segRow.dotWidth) / 4)
-
-        SegField {
-            id: e0
-            width: segRow.segWidth
-            height: segRow.height
-            segIndex: 0
-        }
-        Label {
-            width: segRow.dotWidth
-            height: segRow.height
-            text: "."
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: "Microsoft YaHei"
-            font.pointSize: ScreenTools.scaleNum(10, true)
-        }
-        SegField {
-            id: e1
-            width: segRow.segWidth
-            height: segRow.height
-            segIndex: 1
-        }
-        Label {
-            width: segRow.dotWidth
-            height: segRow.height
-            text: "."
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: "Microsoft YaHei"
-            font.pointSize: ScreenTools.scaleNum(10, true)
-        }
-        SegField {
-            id: e2
-            width: segRow.segWidth
-            height: segRow.height
-            segIndex: 2
-        }
-        Label {
-            width: segRow.dotWidth
-            height: segRow.height
-            text: "."
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: "Microsoft YaHei"
-            font.pointSize: ScreenTools.scaleNum(10, true)
-        }
-        SegField {
-            id: e3
-            width: segRow.segWidth
-            height: segRow.height
-            segIndex: 3
-        }
-    }
 }

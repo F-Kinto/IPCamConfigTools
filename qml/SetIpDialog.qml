@@ -17,27 +17,6 @@ Dialog {
     // 网卡信息列表（ScreenTools::getNetworkInterfaces() 的返回值）
     property var nicList: []
 
-    width: ScreenTools.scaleNum(460)
-    height: ScreenTools.scaleNum(320)
-    modal: true
-    dim: true
-    closePolicy: Popup.CloseOnEscape
-    clip: true
-    anchors.centerIn: Overlay.overlay
-    title: qsTr("设置IP")
-    background: Rectangle {
-        radius: ScreenTools.scaleNum(4)
-        color: "#FFFFFF"
-        border.width: 1
-        border.color: "#D8DCE3"
-    }
-
-    // 每次打开时刷新网卡列表并带出当前网卡的地址
-    onAboutToShow: {
-        refreshNics();
-        applyNic();
-    }
-
     function refreshNics() {
         nicList = ScreenTools.getNetworkInterfaces();
     }
@@ -45,6 +24,7 @@ Dialog {
     function currentNic() {
         if (nicCombo.currentIndex < 0 || nicCombo.currentIndex >= nicList.length)
             return null;
+
         return nicList[nicCombo.currentIndex];
     }
 
@@ -55,14 +35,38 @@ Dialog {
             ipInput.value = "";
             maskInput.value = "";
             gwInput.value = "0.0.0.0";
-            return;
+            return ;
         }
         var ipv4 = nic["ipv4"] || [];
         // 网关获取不到时显示默认值
         var gw = nic["gateway"] || "";
-        ipInput.value  = ipv4.length > 0 ? ipv4[0] : "";
+        ipInput.value = ipv4.length > 0 ? ipv4[0] : "";
         maskInput.value = nic["netmask"] || "";
-        gwInput.value   = gw.length > 0 ? gw : "0.0.0.0";
+        gwInput.value = gw.length > 0 ? gw : "0.0.0.0";
+    }
+
+    width: ScreenTools.scaleNum(460)
+    height: ScreenTools.scaleNum(320)
+    modal: true
+    dim: true
+    closePolicy: Popup.CloseOnEscape
+    clip: true
+    anchors.centerIn: Overlay.overlay
+    title: qsTr("设置IP")
+    // 每次打开时刷新网卡列表并带出当前网卡的地址
+    onAboutToShow: {
+        refreshNics();
+        applyNic();
+    }
+    padding: ScreenTools.scaleNum(16)
+    // 高度由内容区的隐式高度决定，避免底部按钮被压缩/截断
+    contentHeight: contentLayout.implicitHeight
+
+    background: Rectangle {
+        radius: ScreenTools.scaleNum(4)
+        color: "#FFFFFF"
+        border.width: 1
+        border.color: "#DCDCDC"
     }
 
     // 屏蔽 Dialog 默认标题栏，改用统一封装的标题栏（含关闭按钮）
@@ -70,13 +74,11 @@ Dialog {
         title: root.title
         onClosed: root.reject()
     }
+
     footer: Item {
         height: 0
     }
     // 四周外边距统一 16
-    padding: ScreenTools.scaleNum(16)
-    // 高度由内容区的隐式高度决定，避免底部按钮被压缩/截断
-    contentHeight: contentLayout.implicitHeight
 
     // 4 段式 IP 输入框（如 192.168.5.205），交互细节见 AppIpInput.qml
     component IpInput: AppIpInput {
@@ -97,6 +99,7 @@ Dialog {
 
             AppCheckBox {
                 id: startAddrCheck
+
                 text: qsTr("修改IP起始地址")
                 checked: false
                 // 与“批量修改设定IP”互斥：勾选本项时取消另一项（两者可同时不勾选）
@@ -107,11 +110,14 @@ Dialog {
                     }
                 }
             }
+
             Item {
                 Layout.fillWidth: true
             }
+
             AppCheckBox {
                 id: batchCheck
+
                 text: qsTr("批量修改设定IP")
                 checked: false
                 visible: false
@@ -123,6 +129,7 @@ Dialog {
                     }
                 }
             }
+
         }
 
         // ===== 网卡 =====
@@ -137,8 +144,10 @@ Dialog {
                 horizontalAlignment: Text.AlignLeft
                 text: qsTr("网卡")
             }
+
             AppComboBox {
                 id: nicCombo
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.ctrlH
                 textRole: "displayName"
@@ -146,12 +155,14 @@ Dialog {
                 displayText: currentIndex >= 0 ? currentText : qsTr("未检测到网卡")
                 onCurrentIndexChanged: root.applyNic()
             }
+
         }
 
         // ===== IP =====
         RowLayout {
             Layout.fillWidth: true
             spacing: ScreenTools.scaleNum(8)
+
             Label {
                 Layout.preferredWidth: root.labelWidth
                 Layout.preferredHeight: root.ctrlH
@@ -159,16 +170,20 @@ Dialog {
                 horizontalAlignment: Text.AlignLeft
                 text: qsTr("IP")
             }
+
             IpInput {
                 id: ipInput
+
                 Layout.fillWidth: true
             }
+
         }
 
         // ===== 子网掩码 =====
         RowLayout {
             Layout.fillWidth: true
             spacing: ScreenTools.scaleNum(8)
+
             Label {
                 Layout.preferredWidth: root.labelWidth
                 Layout.preferredHeight: root.ctrlH
@@ -176,16 +191,20 @@ Dialog {
                 horizontalAlignment: Text.AlignLeft
                 text: qsTr("子网掩码")
             }
+
             IpInput {
                 id: maskInput
+
                 Layout.fillWidth: true
             }
+
         }
 
         // ===== 网关 =====
         RowLayout {
             Layout.fillWidth: true
             spacing: ScreenTools.scaleNum(8)
+
             Label {
                 Layout.preferredWidth: root.labelWidth
                 Layout.preferredHeight: root.ctrlH
@@ -193,10 +212,13 @@ Dialog {
                 horizontalAlignment: Text.AlignLeft
                 text: qsTr("网关")
             }
+
             IpInput {
                 id: gwInput
+
                 Layout.fillWidth: true
             }
+
         }
 
         // ===== 底部：确定 / 取消 =====
@@ -207,23 +229,30 @@ Dialog {
             Layout.minimumHeight: ScreenTools.scaleNum(36)
             Layout.topMargin: ScreenTools.scaleNum(4)
             spacing: ScreenTools.scaleNum(16)
+
             Item {
                 Layout.fillWidth: true
             }
+
             AppButton {
                 Layout.preferredHeight: root.ctrlH
                 highlighted: true
                 text: qsTr("确定")
                 onClicked: root.accept()
             }
+
             AppButton {
                 Layout.preferredHeight: root.ctrlH
                 text: qsTr("取消")
                 onClicked: root.reject()
             }
+
             Item {
                 Layout.fillWidth: true
             }
+
         }
+
     }
+
 }

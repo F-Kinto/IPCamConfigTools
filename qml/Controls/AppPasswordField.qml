@@ -22,10 +22,12 @@ TextField {
     echoMode: TextInput.Password
     font.family: "Microsoft YaHei"
     font.pointSize: ScreenTools.scaleNum(10, true)
+
     background: Rectangle {
         radius: ScreenTools.scaleNum(4)
         color: control.enabled ? "white" : "#f0f0f0"
         border.width: 1
-        border.color: control.activeFocus ? "#2f6fed" : "#767676"
+        border.color: control.activeFocus ? "#2f6fed" : "#DCDCDC"
     }
+
 }

@@ -14,36 +14,10 @@ Dialog {
     readonly property int ctrlH: ScreenTools.scaleNum(28)
     // 左侧标签列宽（容纳“标题内容（多行用^分隔）”）
     readonly property int labelWidth: ScreenTools.scaleNum(150)
-
-    width: ScreenTools.scaleNum(560)
-    // 两行下拉框（叠加附加信息 / 时间位置）加入后需同步增高，否则内容被 clip 裁掉
-    height: ScreenTools.scaleNum(400)
-    modal: true
-    dim: true
-    closePolicy: Popup.CloseOnEscape
-    clip: true
-    anchors.centerIn: Overlay.overlay
-    title: qsTr("OSD修改")
-    background: Rectangle {
-        radius: ScreenTools.scaleNum(4)
-        color: "#FFFFFF"
-        border.width: 1
-        border.color: "#D8DCE3"
-    }
-
     // 与“其它设置-OSD设置”页共用的参数（由 main.qml 注入）
     property QtObject sharedOsd: null
-
     // OSD显示选择“禁用”时，除“OSD显示”本身外的所有项整体不可编辑
     readonly property bool osdParamsEnabled: osdDisplayCombo.currentIndex === 0
-
-    // 打开时：已保存过就用共享参数，否则恢复默认值
-    onAboutToShow: {
-        if (root.sharedOsd && root.sharedOsd.saved)
-            root.applyShared();
-        else
-            root.resetDefaults();
-    }
 
     function resetDefaults() {
         timeTitleCheck.checked = false;
@@ -72,7 +46,8 @@ Dialog {
     // 保存时写回共享参数，供“其它设置-OSD设置”页读取
     function saveShared() {
         if (!root.sharedOsd)
-            return;
+            return ;
+
         var s = root.sharedOsd;
         s.setTimeTitle = timeTitleCheck.checked;
         s.osdDisplayIndex = osdDisplayCombo.currentIndex;
@@ -95,18 +70,43 @@ Dialog {
         };
     }
 
+    width: ScreenTools.scaleNum(560)
+    // 两行下拉框（叠加附加信息 / 时间位置）加入后需同步增高，否则内容被 clip 裁掉
+    height: ScreenTools.scaleNum(400)
+    modal: true
+    dim: true
+    closePolicy: Popup.CloseOnEscape
+    clip: true
+    anchors.centerIn: Overlay.overlay
+    title: qsTr("OSD修改")
+    // 打开时：已保存过就用共享参数，否则恢复默认值
+    onAboutToShow: {
+        if (root.sharedOsd && root.sharedOsd.saved)
+            root.applyShared();
+        else
+            root.resetDefaults();
+    }
+    padding: ScreenTools.scaleNum(16)
+    // 高度由内容区的隐式高度决定，避免底部按钮被压缩/截断
+    contentHeight: contentLayout.implicitHeight
+
+    background: Rectangle {
+        radius: ScreenTools.scaleNum(4)
+        color: "#FFFFFF"
+        border.width: 1
+        border.color: "#DCDCDC"
+    }
+
     // 屏蔽 Dialog 默认标题栏，使用与设定IP弹窗一致的样式
     header: AppDialogHeader {
         title: root.title
         onClosed: root.reject()
     }
+
     footer: Item {
         height: 0
     }
     // 四周外边距统一 16
-    padding: ScreenTools.scaleNum(16)
-    // 高度由内容区的隐式高度决定，避免底部按钮被压缩/截断
-    contentHeight: contentLayout.implicitHeight
 
     contentItem: ColumnLayout {
         id: contentLayout
@@ -117,6 +117,7 @@ Dialog {
         // ===== 设定时间和标题 =====
         AppCheckBox {
             id: timeTitleCheck
+
             text: qsTr("设定时间和标题")
             checked: false
             enabled: root.osdParamsEnabled
@@ -134,13 +135,16 @@ Dialog {
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("OSD显示")
             }
+
             AppComboBox {
                 id: osdDisplayCombo
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.ctrlH
                 model: [qsTr("启用"), qsTr("禁用")]
                 currentIndex: 0
             }
+
         }
 
         // ===== 时间显示格式 + 显示星期 =====
@@ -157,19 +161,23 @@ Dialog {
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("时间显示格式")
             }
+
             AppComboBox {
                 id: timeFormatCombo
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.ctrlH
-                model: ["yyyy-mm-dd hh:mm:ss", "yyyy/mm/dd hh:mm:ss", "yy-mm-dd hh:mm:ss", "yy/mm/dd hh:mm:ss",
-                        "hh:mm:ss dd/mm/yyyy", "hh:mm:ss dd-mm-yyyy", "hh:mm:ss mm/dd/yyyy", "hh:mm:ss mm-dd-yyyy"]
+                model: ["yyyy-mm-dd hh:mm:ss", "yyyy/mm/dd hh:mm:ss", "yy-mm-dd hh:mm:ss", "yy/mm/dd hh:mm:ss", "hh:mm:ss dd/mm/yyyy", "hh:mm:ss dd-mm-yyyy", "hh:mm:ss mm/dd/yyyy", "hh:mm:ss mm-dd-yyyy"]
                 currentIndex: 0
             }
+
             AppCheckBox {
                 id: weekCheck
+
                 text: qsTr("显示星期")
                 checked: false
             }
+
         }
 
         // ===== 标题位置 =====
@@ -185,14 +193,17 @@ Dialog {
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("标题位置")
             }
+
             AppComboBox {
                 id: titlePosCombo
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.ctrlH
                 model: [qsTr("不显示"), qsTr("左上角"), qsTr("右上角"), qsTr("左下角"), qsTr("右下角")]
                 // 默认右下角
                 currentIndex: 4
             }
+
         }
 
         // ===== 标题内容 =====
@@ -208,12 +219,15 @@ Dialog {
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("标题内容（多行用^分隔）")
             }
+
             AppTextField {
                 id: titleInput
+
                 Layout.fillWidth: true
                 // 标题内容默认为空
                 text: ""
             }
+
         }
 
         // ===== 底部：保存 =====
@@ -228,6 +242,7 @@ Dialog {
             Item {
                 Layout.fillWidth: true
             }
+
             AppButton {
                 Layout.preferredHeight: root.ctrlH
                 highlighted: true
@@ -240,9 +255,13 @@ Dialog {
                     console.log(qsTr("OSD修改-保存: ") + JSON.stringify(root.collectConfig()));
                 }
             }
+
             Item {
                 Layout.fillWidth: true
             }
+
         }
+
     }
+
 }

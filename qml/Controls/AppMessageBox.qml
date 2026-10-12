@@ -27,7 +27,6 @@ Dialog {
     property url iconSource: ""
     // 图标尺寸（默认 32x32，图标为空时不占位）
     property int iconSize: ScreenTools.scaleNum(32)
-
     // 显示两个按钮或者一个按钮
     property bool twoButtons: false
 
@@ -53,29 +52,32 @@ Dialog {
     // 圆角 4px，并裁掉超出圆角的子项
     clip: true
     anchors.centerIn: Overlay.overlay
-    background: Rectangle {
-        radius: ScreenTools.scaleNum(4)
-        color: "#FFFFFF"
-        border.width: 1
-        border.color: "#D8DCE3"
-    }
-
-    // 屏蔽 Dialog 自带的默认标题栏/按钮栏，全部由 contentItem 统一布局
-    header: Item {
-        height: 0
-    }
-    footer: Item {
-        height: 0
-    }
     padding: 0
     topPadding: 0
     bottomPadding: 0
     leftPadding: 0
     rightPadding: 0
 
+    background: Rectangle {
+        radius: ScreenTools.scaleNum(4)
+        color: "#FFFFFF"
+        border.width: 1
+        border.color: "#DCDCDC"
+    }
+
+    // 屏蔽 Dialog 自带的默认标题栏/按钮栏，全部由 contentItem 统一布局
+    header: Item {
+        height: 0
+    }
+
+    footer: Item {
+        height: 0
+    }
+
     contentItem: ColumnLayout {
         anchors.fill: parent
         anchors.bottomMargin: ScreenTools.scaleNum(16)
+
         // ===== 1) 标题 + 关闭按钮：与其它弹窗共用同一个标题栏控件 =====
         AppDialogHeader {
             Layout.fillWidth: true
@@ -100,6 +102,7 @@ Dialog {
                 source: root.iconSource
                 fillMode: Image.PreserveAspectFit
             }
+
             Label {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -112,6 +115,7 @@ Dialog {
                 wrapMode: Text.WrapAnywhere
                 text: root.message
             }
+
         }
 
         // ===== 3) 取消 + 确定（高度 36，右对齐）=====
@@ -123,6 +127,7 @@ Dialog {
             Item {
                 Layout.fillWidth: true
             }
+
             AppButton {
                 Layout.preferredHeight: ScreenTools.scaleNum(36)
                 font.bold: false
@@ -130,6 +135,7 @@ Dialog {
                 onClicked: root.reject()
                 visible: twoButtons
             }
+
             AppButton {
                 Layout.preferredHeight: ScreenTools.scaleNum(36)
                 highlighted: true
@@ -137,9 +143,13 @@ Dialog {
                 text: root.okText
                 onClicked: root.accept()
             }
+
             Item {
                 Layout.fillWidth: true
             }
+
         }
+
     }
+
 }

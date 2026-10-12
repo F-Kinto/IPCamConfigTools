@@ -20,8 +20,10 @@ AppButton {
     font.bold: true
     text: "✕"
     font.pointSize: ScreenTools.scaleNum(14, true)
+
     background: Rectangle {
         radius: ScreenTools.scaleNum(4)
         color: (control.hovered || control.down) ? "#FF4A4A" : "transparent"
     }
+
 }

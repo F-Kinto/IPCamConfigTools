@@ -31,15 +31,14 @@ ComboBox {
         radius: ScreenTools.scaleNum(4)
         color: control.enabled ? "white" : "#f0f0f0"
         border.width: 1
-        border.color: (control.activeFocus || control.hovered || control.down) ? "#2f6fed" : "#767676"
+        border.color: (control.activeFocus || control.hovered || control.down) ? "#2f6fed" : "#DCDCDC"
     }
 
     popup: Popup {
         y: control.height
         width: control.width
         // 最多显示 10 项（每项 24px），超出部分由滚动条滚动显示
-        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding,
-                         ScreenTools.scaleNum(24) * 10 + ScreenTools.scaleNum(8))
+        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, ScreenTools.scaleNum(24) * 10 + ScreenTools.scaleNum(8))
         padding: ScreenTools.scaleNum(2)
         topMargin: ScreenTools.scaleNum(6)
         bottomMargin: ScreenTools.scaleNum(6)
@@ -50,16 +49,20 @@ ComboBox {
             model: control.delegateModel
             currentIndex: control.highlightedIndex
             highlightMoveDuration: 0
-            ScrollIndicator.vertical: ScrollIndicator { }
+
+            ScrollIndicator.vertical: ScrollIndicator {
+            }
+
         }
 
         background: Rectangle {
             radius: ScreenTools.scaleNum(4)
             color: "#FFFFFF"
             border.width: 1
-            border.color: "#D8DCE3"
+            border.color: "#DCDCDC"
             clip: true
         }
+
     }
 
     // 下拉列表：每项固定 24px 高；可见区域最多 10 项，超出滚动；外框 4px 圆角
@@ -72,6 +75,7 @@ ComboBox {
         // 列表项文本距左右边界各 8px
         leftPadding: ScreenTools.scaleNum(8)
         rightPadding: ScreenTools.scaleNum(8)
+
         contentItem: Label {
             font: control.font
             verticalAlignment: Text.AlignVCenter
@@ -81,10 +85,12 @@ ComboBox {
             color: {
                 if (control.currentIndex === index)
                     return "#2f6fed";
+
                 // 悬停项沿用系统高亮（深蓝底 + 白字）
                 return control.highlightedIndex === index ? "#FFFFFF" : "#1A1A1A";
             }
         }
+
         background: Rectangle {
             color: {
                 if (control.currentIndex === index)
@@ -93,5 +99,7 @@ ComboBox {
                 return control.highlightedIndex === index ? control.palette.highlight : "transparent";
             }
         }
+
     }
+
 }

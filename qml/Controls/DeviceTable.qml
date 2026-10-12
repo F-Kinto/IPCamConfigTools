@@ -10,23 +10,17 @@ Rectangle {
     // true : 允许鼠标拖拽表头分割线调整列宽
     // false: 禁止拖拽调整
     property bool resizable: true
-
     // true : 列宽按可用宽度与 stretchFactors 权重自动分配，所有列压缩进可视区
     // false: 使用 fixedWidths 指定的固定列宽，超出可视区域时表格横向滚动
     property bool stretchToFill: false
-
     // 列标题
     property var titles: []
-
     // resizable 为 false 时使用的固定列宽
     property var fixedWidths: [ScreenTools.scaleNum(130), ScreenTools.scaleNum(110), ScreenTools.scaleNum(90), ScreenTools.scaleNum(120), ScreenTools.scaleNum(171), ScreenTools.scaleNum(171), ScreenTools.scaleNum(120), ScreenTools.scaleNum(140), ScreenTools.scaleNum(140), ScreenTools.scaleNum(110)]
-
     // resizable 为 true 时使用的拉伸权重
     property var stretchFactors: [1.1, 1, 0.9, 1.1, 1.3, 1.3, 1.1, 1.2, 1.2, 1.1]
-
     // 单列最小宽度，拖拽与自动分配时都会遵守
     property real minColumnWidth: ScreenTools.scaleNum(60)
-
     property int headerHeight: ScreenTools.scaleNum(45)
     property int rowHeight: ScreenTools.scaleNum(30)
     property color lineColor: "#d0d0d0"
@@ -39,20 +33,17 @@ Rectangle {
     property bool showEmptyRows: true
     // 当前是否无数据
     readonly property bool tableEmpty: (typeof tableView.rows === "number") ? tableView.rows === 0 : true
-
     // 统一字体（微软雅黑 10pt）
     property font labelFont: Qt.font({
         "family": "Microsoft YaHei",
         "pointSize": ScreenTools.scaleNum(10, true)
     })
-
     // 表头字体（微软雅黑 10pt 加粗）
     property font headerFont: Qt.font({
         "family": "Microsoft YaHei",
         "pointSize": ScreenTools.scaleNum(10, true),
         "bold": true
     })
-
     // ===== 行选中（单选）=====
     // 当前选中的行号，-1 表示没有选中。
     // 注意：与“复选框勾选（checkedRows，可多选）”是两套独立状态 ——
@@ -60,20 +51,6 @@ Rectangle {
     property int currentRow: -1
     // 选中行的背景色（浅蓝）
     property color currentRowColor: "#D6EAFF"
-
-    // 指定行是否为当前选中行（空数据占位行时 row 未定义，故需防一手）
-    function isCurrentRow(row) {
-        return typeof row !== "undefined" && row === root.currentRow;
-    }
-
-    // 选中某一行：单条数据场景下重复点击同一行保持选中
-    function selectRow(row) {
-        if (typeof row === "undefined" || row < 0)
-            return;
-
-        root.currentRow = row;
-    }
-
     // ===== 排序 =====
     // 是否允许点击表头排序
     property bool sortEnabled: true
@@ -83,12 +60,42 @@ Rectangle {
     // 当前排序列 / 方向（-1 表示未排序）
     property int sortColumn: -1
     property bool sortAscending: true
+    // 当前处于选中状态的单元格（TextEdit，用于双击全选 / 单击取消选中）
+    property var selectedCell: null
+    // 需要显示“复选框 + 文本”的列号（默认 -1 表示不显示）；设备列表传 0，即 IP 列
+    property int checkBoxColumn: -1
+    // 已勾选的行号列表：由调用方维护（与主界面“已选数量”是同一份数据）
+    property var checkedRows: []
+    property alias model: tableView.model
+    // 当前实际列宽（表头与单元格共用，保证对齐）
+    readonly property alias columnWidths: internal.widths
+    readonly property real totalWidth: {
+        var sum = 0;
+        for (var i = 0; i < internal.widths.length; ++i) {
+            sum += internal.widths[i];
+        }
+        return sum;
+    }
+    // 是否已经手动拖拽调整过列宽
+    property bool userResized: false
 
     // 排序后行号发生变化：indexMap[旧行号] = 新行号，供调用方同步“已选行”
     signal rowsReordered(var indexMap)
+    // 行勾选状态变化（参数：行号、是否勾选）
+    signal rowChecked(int row, bool checked)
 
-    // 当前处于选中状态的单元格（TextEdit，用于双击全选 / 单击取消选中）
-    property var selectedCell: null
+    // 指定行是否为当前选中行（空数据占位行时 row 未定义，故需防一手）
+    function isCurrentRow(row) {
+        return typeof row !== "undefined" && row === root.currentRow;
+    }
+
+    // 选中某一行：单条数据场景下重复点击同一行保持选中
+    function selectRow(row) {
+        if (typeof row === "undefined" || row < 0)
+            return ;
+
+        root.currentRow = row;
+    }
 
     // 按字符 ASCII 码比较两个字符串（逐字符比较 charCodeAt，纯 ASCII 场景与字典序一致）
     function compareAscii(a, b) {
@@ -106,30 +113,29 @@ Rectangle {
     // 点击表头排序：同一列再次点击切换升/降序，换列则重新升序
     function sortByColumn(col) {
         if (!root.sortEnabled)
-            return;
+            return ;
 
         var model = tableView.model;
         if (!model || model.rows === undefined || !model.rows || model.rows.length === 0)
-            return;
+            return ;
 
         var role = root.columnRoles[col];
         if (role === undefined || role === "")
-            return;
+            return ;
 
         var asc = (root.sortColumn === col) ? !root.sortAscending : true;
         // 带上原行号一起排序，排完后得到“旧行号 -> 新行号”的映射
         var decorated = [];
-        for (var i = 0; i < model.rows.length; i++)
-            decorated.push({
-                "oldIndex": i,
-                "data": model.rows[i]
-            });
-
-        decorated.sort(function (x, y) {
+        for (var i = 0; i < model.rows.length; i++) decorated.push({
+            "oldIndex": i,
+            "data": model.rows[i]
+        })
+        decorated.sort(function(x, y) {
             return asc ? root.compareAscii(x.data[role], y.data[role]) : root.compareAscii(y.data[role], x.data[role]);
         });
         var newRows = [];
-        var indexMap = {};
+        var indexMap = {
+        };
         for (var j = 0; j < decorated.length; j++) {
             newRows.push(decorated[j].data);
             indexMap[decorated[j].oldIndex] = j;
@@ -168,59 +174,10 @@ Rectangle {
         }
     }
 
-    // 需要显示“复选框 + 文本”的列号（默认 -1 表示不显示）；设备列表传 0，即 IP 列
-    property int checkBoxColumn: -1
-
-    // 已勾选的行号列表：由调用方维护（与主界面“已选数量”是同一份数据）
-    property var checkedRows: []
-
-    // 行勾选状态变化（参数：行号、是否勾选）
-    signal rowChecked(int row, bool checked)
-
     // 指定列是否为“复选框列”（表格为空占位行时 column 未定义，故需防一手）
     function isCheckBoxColumn(col) {
         return typeof col !== "undefined" && col === root.checkBoxColumn;
     }
-
-    property alias model: tableView.model
-
-    // 当前实际列宽（表头与单元格共用，保证对齐）
-    readonly property alias columnWidths: internal.widths
-
-    readonly property real totalWidth: {
-        var sum = 0;
-        for (var i = 0; i < internal.widths.length; ++i) {
-            sum += internal.widths[i];
-        }
-        return sum;
-    }
-
-    // 外框由外层 Rectangle 提供，此处不再画边框，避免重复描边
-    border.width: 0
-    color: "white"
-    clip: true
-
-    QtObject {
-        id: internal
-
-        property var widths: []
-    }
-
-    onTitlesChanged: computeWidths()
-    onStretchToFillChanged: computeWidths()
-    onFixedWidthsChanged: computeWidths()
-    onStretchFactorsChanged: computeWidths()
-    onMinColumnWidthChanged: computeWidths()
-    // 用户手动拖拽过之后，窗口缩放不再覆盖手动列宽
-    onWidthChanged: {
-        if (!userResized) {
-            computeWidths();
-        }
-    }
-    Component.onCompleted: computeWidths()
-
-    // 是否已经手动拖拽调整过列宽
-    property bool userResized: false
 
     // 根据当前模式重新计算列宽
     function computeWidths() {
@@ -236,9 +193,9 @@ Rectangle {
             for (i = 0; i < n; ++i) {
                 total += (root.stretchFactors[i] !== undefined ? root.stretchFactors[i] : 1);
             }
-            if (total <= 0) {
+            if (total <= 0)
                 total = 1;
-            }
+
             for (i = 0; i < n; ++i) {
                 var factor = root.stretchFactors[i] !== undefined ? root.stretchFactors[i] : 1;
                 result.push(Math.max(root.minColumnWidth, root.width * factor / total));
@@ -252,14 +209,14 @@ Rectangle {
 
     // 拖拽调整相邻两列宽度：index 列加 delta，index+1 列减 delta，两列都不小于 minColumnWidth
     function resizeColumn(index, delta) {
-        if (!root.resizable) {
-            return;
-        }
+        if (!root.resizable)
+            return ;
+
         var w = internal.widths.slice();
         var next = index + 1;
-        if (index < 0 || next >= w.length) {
-            return;
-        }
+        if (index < 0 || next >= w.length)
+            return ;
+
         var maxDelta = w[next] - root.minColumnWidth;
         var minDelta = root.minColumnWidth - w[index];
         var applied = Math.min(maxDelta, Math.max(minDelta, delta));
@@ -268,6 +225,29 @@ Rectangle {
         userResized = true;
         internal.widths = w;
         tableView.forceLayout();
+    }
+
+    // 外框由外层 Rectangle 提供，此处不再画边框，避免重复描边
+    border.width: 0
+    color: "white"
+    clip: true
+    onTitlesChanged: computeWidths()
+    onStretchToFillChanged: computeWidths()
+    onFixedWidthsChanged: computeWidths()
+    onStretchFactorsChanged: computeWidths()
+    onMinColumnWidthChanged: computeWidths()
+    // 用户手动拖拽过之后，窗口缩放不再覆盖手动列宽
+    onWidthChanged: {
+        if (!userResized)
+            computeWidths();
+
+    }
+    Component.onCompleted: computeWidths()
+
+    QtObject {
+        id: internal
+
+        property var widths: []
     }
 
     // ===== 表头 =====
@@ -306,6 +286,7 @@ Rectangle {
                             // 当前排序列后面加升序/降序箭头
                             text: modelData + (root.sortColumn === index ? (root.sortAscending ? " \u25b2" : " \u25bc") : "")
                         }
+
                     }
 
                     // 点击表头排序（升序/降序切换）；与右侧拖拽把手互不干扰
@@ -324,6 +305,7 @@ Rectangle {
                         height: parent.height
                         color: root.lineColor
                     }
+
                     // 第一列补画左边框
                     Rectangle {
                         anchors.left: parent.left
@@ -332,6 +314,7 @@ Rectangle {
                         color: root.lineColor
                         visible: index === 0
                     }
+
                     Rectangle {
                         anchors.bottom: parent.bottom
                         width: parent.width
@@ -341,15 +324,14 @@ Rectangle {
 
                     // 拖拽把手（仅拉伸模式可用）
                     MouseArea {
+                        property real startX: 0
+
                         enabled: root.resizable && index < root.titles.length - 1
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
                         anchors.right: parent.right
                         width: ScreenTools.scaleNum(6)
                         cursorShape: Qt.SplitHCursor
-
-                        property real startX: 0
-
                         onPressed: {
                             startX = mouseX;
                         }
@@ -357,9 +339,13 @@ Rectangle {
                             root.resizeColumn(index, mouseX - startX);
                         }
                     }
+
                 }
+
             }
+
         }
+
     }
 
     // ===== 空数据占位行：铺满可视区域，单数行白色、双数行浅灰 =====
@@ -380,14 +366,6 @@ Rectangle {
         contentHeight: emptyColumn.height
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
-
-        ScrollBar.horizontal: ScrollBar {
-            policy: ScrollBar.AlwaysOn
-            interactive: true
-            active: true
-            height: ScreenTools.scaleNum(14)
-            z: 2
-        }
 
         Column {
             id: emptyColumn
@@ -416,6 +394,7 @@ Rectangle {
                                 height: parent.height
                                 color: root.lineColor
                             }
+
                             // 第一列补画左边框
                             Rectangle {
                                 anchors.left: parent.left
@@ -424,17 +403,32 @@ Rectangle {
                                 color: root.lineColor
                                 visible: index === 0
                             }
+
                             Rectangle {
                                 anchors.bottom: parent.bottom
                                 width: parent.width
                                 height: 1
                                 color: root.lineColor
                             }
+
                         }
+
                     }
+
                 }
+
             }
+
         }
+
+        ScrollBar.horizontal: ScrollBar {
+            policy: ScrollBar.AlwaysOn
+            interactive: true
+            active: true
+            height: ScreenTools.scaleNum(14)
+            z: 2
+        }
+
     }
 
     // ===== 表格内容 =====
@@ -451,7 +445,6 @@ Rectangle {
         columnSpacing: 0
         rowSpacing: 0
         boundsBehavior: Flickable.StopAtBounds
-
         // 由列宽属性统一提供宽度，保证 contentWidth 正确（无数据时也能横向滚动）
         columnWidthProvider: function(column) {
             return root.columnWidths[column] !== undefined ? root.columnWidths[column] : ScreenTools.scaleNum(100);
@@ -467,6 +460,7 @@ Rectangle {
             active: true
             height: ScreenTools.scaleNum(14)
         }
+
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
         }
@@ -484,6 +478,7 @@ Rectangle {
                 height: parent.height
                 color: root.lineColor
             }
+
             // 第一列补画左边框
             Rectangle {
                 anchors.left: parent.left
@@ -492,6 +487,7 @@ Rectangle {
                 color: root.lineColor
                 visible: typeof column !== "undefined" ? column === 0 : true
             }
+
             Rectangle {
                 anchors.bottom: parent.bottom
                 width: parent.width
@@ -536,6 +532,17 @@ Rectangle {
                     font: root.labelFont
                     color: "#1A1A1A"
                     text: display !== undefined ? display : ""
+                    Keys.onPressed: {
+                        if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier)) {
+                            checkCellText.copy();
+                            event.accepted = true;
+                        }
+                    }
+                    onActiveFocusChanged: {
+                        if (!activeFocus && root.selectedCell === checkCellText)
+                            root.selectedCell = null;
+
+                    }
 
                     MouseArea {
                         anchors.fill: parent
@@ -553,18 +560,9 @@ Rectangle {
                         }
                     }
                     // 只允许 Ctrl+C 复制
-                    Keys.onPressed: {
-                        if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier)) {
-                            checkCellText.copy();
-                            event.accepted = true;
-                        }
-                    }
-                    onActiveFocusChanged: {
-                        if (!activeFocus && root.selectedCell === checkCellText)
-                            root.selectedCell = null;
 
-                    }
                 }
+
             }
 
             // 其它列：只读文本，同样支持双击全选 + Ctrl+C
@@ -583,6 +581,17 @@ Rectangle {
                 color: "#1A1A1A"
                 text: display !== undefined ? display : ""
                 visible: !root.isCheckBoxColumn(column)
+                Keys.onPressed: {
+                    if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier)) {
+                        cellText.copy();
+                        event.accepted = true;
+                    }
+                }
+                onActiveFocusChanged: {
+                    if (!activeFocus && root.selectedCell === cellText)
+                        root.selectedCell = null;
+
+                }
 
                 MouseArea {
                     anchors.fill: parent
@@ -598,19 +607,11 @@ Rectangle {
                         root.deselectAll();
                     }
                 }
-                Keys.onPressed: {
-                    if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier)) {
-                        cellText.copy();
-                        event.accepted = true;
-                    }
-                }
-                onActiveFocusChanged: {
-                    if (!activeFocus && root.selectedCell === cellText)
-                        root.selectedCell = null;
 
-                }
             }
+
         }
+
     }
 
 }

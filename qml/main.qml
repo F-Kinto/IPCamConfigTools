@@ -38,6 +38,11 @@ ApplicationWindow {
     property bool searching: false
     // 搜索时长（秒），与“系统配置 - 搜索时间(秒)”联动
     property int searchSeconds: 5
+    // ===== 页签（设备列表 / 直播预览）=====
+    // 直播预览页是否已打开（关闭后页签栏整体隐藏，设备列表填满）
+    property bool previewOpen: false
+    // 当前显示的页：0=设备列表，1=直播预览
+    property int currentPage: 0
     // 固件升级：已选择的升级文件（本地路径列表，*.bin，可多选）
     property var upgradeFiles: []
     // 上次打开“升级文件”选择框时所在的目录（由 ConfigureManager 持久化到 ini）
@@ -49,7 +54,7 @@ ApplicationWindow {
     // 该项只用于展示，写入配置文件与启动时匹配都只用网卡名称（displayName）
     readonly property var nicModel: [{
         "display": qsTr("所有网卡")
-    }].concat(root.nicList.map(function (nic) {
+    }].concat(root.nicList.map(function(nic) {
         var ips = nic["ipv4"] || [];
         var name = nic["displayName"] || "";
         // 网卡没有 IPv4 地址时只显示名称
@@ -57,6 +62,9 @@ ApplicationWindow {
             "display": (ips.length > 0 ? ("[" + ips[0] + "]") + " " : "") + ("[" + name + "]")
         };
     }))
+    // ===== 页签：直播预览 =====
+    // 同时播放的最大路数（直播页面最多 4 个窗口）
+    readonly property int maxLiveCount: 4
 
     // ===== 网卡相关 =====
     // 刷新网卡列表，并按配置文件里保存的网卡名自动选中（启动时调用一次）
@@ -80,14 +88,7 @@ ApplicationWindow {
         root.logAction("********** 网卡信息开始 **********");
         for (var i = 0; i < root.nicList.length; i++) {
             var n = root.nicList[i];
-            root.logAction("  [网卡 " + i + "] 名称=" + (n["displayName"] || "")
-                + " | 可读名=" + (n["humanReadableName"] || "")
-                + " | 描述=" + (n["description"] || "")
-                + " | MAC=" + (n["hardwareAddress"] || "")
-                + " | IPv4=" + ((n["ipv4"] || []).join(", "))
-                + " | 子网掩码=" + (n["netmask"] || "")
-                + " | 网关=" + (n["gateway"] || "")
-                + " | 已启用=" + (n["isUp"] ? "是" : "否"));
+            root.logAction("  [网卡 " + i + "] 名称=" + (n["displayName"] || "") + " | 可读名=" + (n["humanReadableName"] || "") + " | 描述=" + (n["description"] || "") + " | MAC=" + (n["hardwareAddress"] || "") + " | IPv4=" + ((n["ipv4"] || []).join(", ")) + " | 子网掩码=" + (n["netmask"] || "") + " | 网关=" + (n["gateway"] || "") + " | 已启用=" + (n["isUp"] ? "是" : "否"));
         }
         root.logAction("********** 网卡信息结束，共 " + root.nicList.length + " 张 **********");
         var cur = root.currentNic();
@@ -116,7 +117,7 @@ ApplicationWindow {
     // ===== 勾选相关 =====
     function selectAll() {
         var list = [];
-        for (var i = 0; i < deviceModel.rowCount; i++) list.push(i);
+        for (var i = 0; i < deviceModel.rowCount; i++) list.push(i)
         selectedRows = list;
     }
 
@@ -147,11 +148,10 @@ ApplicationWindow {
     function setRowChecked(row, checked) {
         var list = root.selectedRows.slice();
         var idx = list.indexOf(row);
-        if (checked && idx < 0) {
+        if (checked && idx < 0)
             list.push(row);
-        } else if (!checked && idx >= 0) {
+        else if (!checked && idx >= 0)
             list.splice(idx, 1);
-        }
         selectedRows = list;
     }
 
@@ -169,9 +169,6 @@ ApplicationWindow {
         DeviceManager.syncCheckedDevices(list);
     }
 
-    // 勾选的行号一变就同步一次（单个勾选 / 全选 / 反选 / 清空都走这里）
-    onSelectedRowsChanged: root.syncCheckedDevices()
-
     // 当前选中（浅蓝高亮）的那一条单独保存一份，供单台操作取用
     function syncCurrentDevice() {
         var row = deviceTable.currentRow;
@@ -179,7 +176,68 @@ ApplicationWindow {
             DeviceManager.setCurrentDevice(deviceModel.rows[row]);
         else
             DeviceManager.clearCurrentDevice();
+    }
 
+    // 合并两份播放列表：按设备唯一 key 去重，已在播的保持原顺序在前
+    function mergeLiveDevices(playing, added) {
+        var seen = ({
+        });
+        var list = [];
+        var i = 0;
+        for (i = 0; i < playing.length; i++) {
+            var k1 = DeviceManager.keyOf(playing[i]);
+            if (seen[k1] !== true) {
+                seen[k1] = true;
+                list.push(playing[i]);
+            }
+        }
+        for (i = 0; i < added.length; i++) {
+            var k2 = DeviceManager.keyOf(added[i]);
+            if (seen[k2] !== true) {
+                seen[k2] = true;
+                list.push(added[i]);
+            }
+        }
+        return list;
+    }
+
+    // 打开直播预览页：以已勾选设备为播放列表，切到“直播预览”页签。
+    // 返回 false 表示被“最多 4 路”限制拦下（已弹窗提示，播放列表保持原样）。
+    // 注意先切页再赋播放列表：页面 visible 后 onDevicesChanged 才会展示标题栏
+    function openLivePreview() {
+        var checked = DeviceManager.checkedDevices();
+        // 页签已打开时，在现有播放列表基础上追加（重复勾选的不会重复开窗口）
+        var playing = root.previewOpen ? livePreviewPage.devices : [];
+        // 单次勾选就超过上限
+        if (checked.length > root.maxLiveCount) {
+            tipBox.show(qsTr("温馨提示"), qsTr("最多同时播放%1台设备").arg(root.maxLiveCount));
+            root.logAction(qsTr("打开直播预览失败: 勾选%1台，超过上限%2台").arg(checked.length).arg(root.maxLiveCount));
+            return false;
+        }
+        // 合并后仍超过上限：已播满，需先关闭空闲的直播通道
+        var merged = root.mergeLiveDevices(playing, checked);
+        if (merged.length > root.maxLiveCount) {
+            tipBox.show(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
+            root.logAction(qsTr("打开直播预览失败: 已播放%1台，再播%2台会超过上限%3台").arg(playing.length).arg(merged.length - playing.length).arg(root.maxLiveCount));
+            return false;
+        }
+        root.previewOpen = true;
+        root.currentPage = 1;
+        livePreviewPage.devices = merged;
+        root.logAction(qsTr("打开直播预览: %1 台设备").arg(livePreviewPage.devices.length));
+        return true;
+    }
+
+    // 关闭直播预览页：回到设备列表并清空播放列表（页签栏随之隐藏）
+    function closeLivePreview() {
+        // 关闭全屏画面（若正开着），再隐藏页签栏
+        livePreviewPage.exitFullScreen();
+        root.previewOpen = false;
+        if (root.currentPage === 1)
+            root.currentPage = 0;
+
+        livePreviewPage.devices = [];
+        root.logAction(qsTr("关闭直播预览"));
     }
 
     // ===== 操作日志 =====
@@ -212,19 +270,11 @@ ApplicationWindow {
             }
         }
         if (frame === "")
-            return {
-                "file": "",
-                "line": 0,
-                "function": ""
-            };
+            return {"file": "", "line": 0, "function": ""};
 
         var at = frame.lastIndexOf("@");
         if (at < 0)
-            return {
-                "file": "",
-                "line": 0,
-                "function": frame.trim()
-            };
+            return {"file": "", "line": 0, "function": frame.trim()};
 
         var func = frame.substring(0, at).trim();
         var fileLine = frame.substring(at + 1).trim();
@@ -257,7 +307,7 @@ ApplicationWindow {
     // 时长 = “系统配置 - 搜索时间(秒)”；结果由下方 Connections 逐台追加进列表
     function searchDevices() {
         if (root.searching)
-            return;
+            return ;
 
         // 选中“所有网卡”时为 null，传空串表示不限制网段
         var nic = root.currentNic();
@@ -265,9 +315,7 @@ ApplicationWindow {
         var nicName = nic ? (nic["humanReadableName"] || nic["displayName"] || "") : "";
         var ips = nic ? (nic["ipv4"] || []) : [];
         var nicDesc = nic ? (nicName + "(" + (ips.length > 0 ? ips[0] : qsTr("无IP")) + ")") : qsTr("所有网卡");
-
         root.logAction(qsTr("设备搜索开始: 网卡=%1, 时长=%2秒").arg(nicDesc).arg(root.searchSeconds));
-
         // 清空上一次的结果、勾选与选中行
         // （selectedRows / currentRow 归零会触发同步；这里再显式清一次，
         //  避免“本来就是 0 / -1 不触发变化信号”导致 C++ 侧残留上一轮的设备）
@@ -286,6 +334,7 @@ ApplicationWindow {
         var s = String(url);
         if (s.indexOf("file:///") === 0)
             s = s.substring(8);
+
         return decodeURIComponent(s);
     }
 
@@ -309,12 +358,11 @@ ApplicationWindow {
             return "";
 
         var names = [];
-        for (var i = 0; i < files.length && i < 3; i++)
-            names.push(root.pathFileName(files[i]));
-
+        for (var i = 0; i < files.length && i < 3; i++) names.push(root.pathFileName(files[i]))
         var text = names.join(", ");
         if (files.length > 3)
             text += qsTr(" 等 %1 个文件").arg(files.length);
+
         return text;
     }
 
@@ -322,10 +370,10 @@ ApplicationWindow {
     function startFileUpgrade() {
         if (root.upgradeFiles.length === 0) {
             tipBox.show(qsTr("温馨提示"), qsTr("请先选择升级文件"));
-            return;
+            return ;
         }
         if (!root.ensureDeviceSelected())
-            return;
+            return ;
 
         root.logAction(qsTr("开始升级: 文件 %1 个, 设备 %2 台").arg(root.upgradeFiles.length).arg(root.selectedCount));
     }
@@ -339,6 +387,8 @@ ApplicationWindow {
         return true;
     }
 
+    // 勾选的行号一变就同步一次（单个勾选 / 全选 / 反选 / 清空都走这里）
+    onSelectedRowsChanged: root.syncCheckedDevices()
     width: ScreenTools.scaleNum(1200)
     height: ScreenTools.scaleNum(740)
     minimumWidth: ScreenTools.scaleNum(900)
@@ -348,35 +398,47 @@ ApplicationWindow {
     color: "#f0f0f0"
     font.family: "Microsoft YaHei"
     font.pointSize: ScreenTools.scaleNum(10, true)
-
-    // 接收设备搜索结果：每发现一台追加一行，搜索结束复位按钮状态
-    Connections {
-        target: DeviceScanner
-
-        // 用显式函数写法（Qt 5.15 对隐式 onFoo 写法会告警）
-        function onDeviceFound(device) {
-            deviceModel.appendRow(device);
-        }
-        function onSearchFinished(count) {
-            root.searching = false;
-            root.logAction(qsTr("设备搜索结束: 共发现 %1 台设备").arg(count));
-        }
-    }
-
-    // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的“当前设备”
-    Connections {
-        target: deviceTable
-        function onCurrentRowChanged() {
-            root.syncCurrentDevice();
-        }
-    }
-
     // 启动时拉取一次网卡列表（并按配置文件自动回显），随后把网卡信息打印到日志
     Component.onCompleted: {
         root.refreshNics();
         root.logNicList();
         // 程序启动自动执行一次设备搜索；延后一个事件循环，等窗口与表格就绪
         Qt.callLater(root.searchDevices);
+    }
+
+    // 接收设备搜索结果：每发现一台追加一行，搜索结束复位按钮状态
+    Connections {
+        // 用显式函数写法（Qt 5.15 对隐式 onFoo 写法会告警）
+        function onDeviceFound(device) {
+            deviceModel.appendRow(device);
+        }
+
+        function onSearchFinished(count) {
+            root.searching = false;
+            root.logAction(qsTr("设备搜索结束: 共发现 %1 台设备").arg(count));
+        }
+
+        target: DeviceScanner
+    }
+
+    // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的“当前设备”
+    Connections {
+        function onCurrentRowChanged() {
+            root.syncCurrentDevice();
+        }
+
+        target: deviceTable
+    }
+
+    // 直播窗口全部关闭（数量为 0）→ 自动收起“直播预览”页签
+    Connections {
+        function onDevicesChanged() {
+            if (root.previewOpen && livePreviewPage.devices.length === 0)
+                root.closeLivePreview();
+
+        }
+
+        target: livePreviewPage
     }
 
     ColumnLayout {
@@ -397,6 +459,7 @@ ApplicationWindow {
                     root.selectAll();
                 }
             }
+
             AppButton {
                 text: qsTr("反选")
                 onClicked: {
@@ -404,6 +467,7 @@ ApplicationWindow {
                     root.invertSelection();
                 }
             }
+
             Label {
                 Layout.preferredHeight: root.controlHeight
                 Layout.minimumWidth: ScreenTools.scaleNum(120)
@@ -411,21 +475,26 @@ ApplicationWindow {
                 elide: Text.ElideRight
                 text: qsTr("搜索完成, 总数: %1    已选: %2").arg(deviceModel.rowCount).arg(root.selectedCount)
             }
+
             AppCheckBox {
                 Layout.preferredHeight: root.controlHeight
                 text: qsTr("主码流播放")
                 onToggled: root.logAction(qsTr("%1已%2").arg(text).arg(checked ? qsTr("勾选") : qsTr("取消勾选")))
             }
+
             Item {
                 Layout.fillWidth: true
             }
+
             Label {
                 Layout.preferredHeight: root.controlHeight
                 verticalAlignment: Text.AlignVCenter
                 text: qsTr("网卡")
             }
+
             AppComboBox {
                 id: nicCombo
+
                 Layout.minimumWidth: ScreenTools.scaleNum(360)
                 Layout.maximumWidth: ScreenTools.scaleNum(440)
                 Layout.preferredHeight: root.controlHeight
@@ -442,6 +511,7 @@ ApplicationWindow {
                     root.logAction(qsTr("网卡切换为'%1'").arg(nic ? nic["displayName"] : qsTr("所有网卡")));
                 }
             }
+
             AppButton {
                 Layout.preferredWidth: ScreenTools.scaleNum(90)
                 Layout.preferredHeight: root.controlHeight
@@ -452,6 +522,7 @@ ApplicationWindow {
                     systemConfigDialog.open();
                 }
             }
+
         }
 
         // ===== 中部：左侧设备表格 3/4 + 右侧操作指令 1/4 =====
@@ -467,71 +538,216 @@ ApplicationWindow {
                 spacing: ScreenTools.scaleNum(6)
 
                 // 设备信息表格（3/4）：外层 2px 深灰边框，表格显示在框内
+                // 内部为“页签栏 + 页面”：设备列表页固定，直播预览页按需打开；
+                // 只有设备列表页时页签栏整体隐藏，表格填满整个框
                 Rectangle {
                     width: (midRow.width - midRow.spacing) * 3 / 4
                     height: midRow.height
                     color: "white"
                     border.width: 1
-                    border.color: "#333333"
+                    border.color: "#DCDCDC"
+                    clip: true
 
-                    DeviceTable {
-                        id: deviceTable
-
+                    Column {
                         anchors.fill: parent
-                        // 让出 2px 边框，表格内容显示在框内
-                        anchors.margins: ScreenTools.scaleNum(2)
-                        titles: root.tableTitles
-                        resizable: root.tableResizable
-                        stretchToFill: root.tableStretchToFill
-                        fixedWidths: root.tableFixedWidths
-                        stretchFactors: root.tableStretchFactors
-                        headerHeight: Math.round(root.controlHeight * 1.5)
-                        rowHeight: root.controlHeight
-                        labelFont: root.appFont
-                        // IP 列（第 0 列）显示“复选框 + IP”，勾选状态与“已选数量”联动
-                        checkBoxColumn: 0
-                        checkedRows: root.selectedRows
-                        onRowChecked: root.setRowChecked(row, checked)
-                        // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
-                        columnRoles: ["ip", "cloudId", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
-                        // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
-                        // 并按新的行号重新保存“当前选中设备”（数据此时已是最新的）
-                        onRowsReordered: {
-                            root.remapSelectedRows(indexMap);
-                            root.syncCurrentDevice();
+
+                        // ===== 页签栏 =====
+                        // 页签不滚动、不压缩，两个固定页签宽度必然放得下
+                        Row {
+                            id: tabBar
+
+                            visible: root.previewOpen
+                            leftPadding: ScreenTools.scaleNum(6)
+                            topPadding: ScreenTools.scaleNum(4)
+                            spacing: ScreenTools.scaleNum(6)
+
+                            // “设备列表”页签：固定页签，不可关闭。
+                            // 固定宽度、无图标、文本左对齐
+                            Rectangle {
+                                width: ScreenTools.scaleNum(160)
+                                height: ScreenTools.scaleNum(30)
+                                radius: ScreenTools.scaleNum(6)
+                                color: root.currentPage === 0 ? "#EAF3FF" : "#F5F6F7"
+                                border.width: 1
+                                border.color: root.currentPage === 0 ? "#B7D8FF" : "#DCDCDC"
+
+                                Label {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: ScreenTools.scaleNum(10)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.family: "Microsoft YaHei"
+                                    font.pointSize: ScreenTools.scaleNum(10, true)
+                                    color: root.currentPage === 0 ? "#1F6FEB" : "#4A4F55"
+                                    text: qsTr("设备列表")
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.currentPage = 0
+                                }
+
+                            }
+
+                            // “直播预览”页签：打开“播放勾选设备”后出现，右侧带关闭按钮。
+                            // 固定宽度、无图标，文本左对齐，关闭按钮贴右侧
+                            Rectangle {
+                                width: ScreenTools.scaleNum(160)
+                                height: ScreenTools.scaleNum(30)
+                                radius: ScreenTools.scaleNum(6)
+                                color: root.currentPage === 1 ? "#EAF3FF" : "#F5F6F7"
+                                border.width: 1
+                                border.color: root.currentPage === 1 ? "#B7D8FF" : "#DCDCDC"
+
+                                Label {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: ScreenTools.scaleNum(10)
+                                    anchors.right: closeGlyph.left
+                                    anchors.rightMargin: ScreenTools.scaleNum(4)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                    font.family: "Microsoft YaHei"
+                                    font.pointSize: ScreenTools.scaleNum(10, true)
+                                    color: root.currentPage === 1 ? "#1F6FEB" : "#4A4F55"
+                                    text: qsTr("直播预览")
+                                }
+                                // 关闭按钮：贴右侧，悬浮变红
+
+                                Item {
+                                    id: closeGlyph
+
+                                    width: ScreenTools.scaleNum(14)
+                                    height: ScreenTools.scaleNum(14)
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: ScreenTools.scaleNum(8)
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        color: closeArea.containsMouse ? "#FFFFFF" : "#8A9099"
+                                        font.pointSize: ScreenTools.scaleNum(9, true)
+                                        text: "\u2715"
+                                    }
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: ScreenTools.scaleNum(7)
+                                        color: closeArea.containsMouse ? "#FF4A4A" : "transparent"
+                                        z: -1
+                                    }
+
+                                    MouseArea {
+                                        id: closeArea
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.closeLivePreview()
+                                    }
+
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    // 关闭按钮区域单独处理，避免点 X 同时触发切页
+                                    z: -1
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.currentPage = 1
+                                }
+
+                            }
+
                         }
 
-                        model: TableModel {
-                            id: deviceModel
+                        // ===== 页面区 =====
+                        Item {
+                            width: parent.width
+                            height: parent.height - (tabBar.visible ? tabBar.height : 0)
 
-                            TableModelColumn {
-                                display: "ip"
-                            }
-                            TableModelColumn {
-                                display: "cloudId"
-                            }
-                            TableModelColumn {
-                                display: "status"
-                            }
-                            TableModelColumn {
-                                display: "currentVersion"
-                            }
-                            TableModelColumn {
-                                display: "targetVersion"
-                            }
-                            TableModelColumn {
-                                display: "osdTitle"
-                            }
-                            TableModelColumn {
-                                display: "mac"
-                            }
-                            TableModelColumn {
-                                display: "deviceType"
+                            DeviceTable {
+                                id: deviceTable
+
+                                anchors.fill: parent
+                                // 让出 2px 边框，表格内容显示在框内
+                                anchors.margins: ScreenTools.scaleNum(2)
+                                visible: root.currentPage === 0
+                                titles: root.tableTitles
+                                resizable: root.tableResizable
+                                stretchToFill: root.tableStretchToFill
+                                fixedWidths: root.tableFixedWidths
+                                stretchFactors: root.tableStretchFactors
+                                headerHeight: Math.round(root.controlHeight * 1.5)
+                                rowHeight: root.controlHeight
+                                labelFont: root.appFont
+                                // IP 列（第 0 列）显示“复选框 + IP”，勾选状态与“已选数量”联动
+                                checkBoxColumn: 0
+                                checkedRows: root.selectedRows
+                                onRowChecked: root.setRowChecked(row, checked)
+                                // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
+                                columnRoles: ["ip", "cloudId", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
+                                // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
+                                // 并按新的行号重新保存“当前选中设备”（数据此时已是最新的）
+                                onRowsReordered: {
+                                    root.remapSelectedRows(indexMap);
+                                    root.syncCurrentDevice();
+                                }
+
+                                model: TableModel {
+                                    id: deviceModel
+
+                                    rows: []
+
+                                    TableModelColumn {
+                                        display: "ip"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "cloudId"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "status"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "currentVersion"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "targetVersion"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "osdTitle"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "mac"
+                                    }
+
+                                    TableModelColumn {
+                                        display: "deviceType"
+                                    }
+
+                                }
+
                             }
 
-                            rows: []
+                            // 直播预览页：播放勾选设备时显示
+                            LivePreviewPage {
+                                id: livePreviewPage
+
+                                anchors.fill: parent
+                                anchors.margins: ScreenTools.scaleNum(2)
+                                visible: root.currentPage === 1
+                            }
+
                         }
+
                     }
+
                 }
 
                 // 操作指令面板（1/4）
@@ -545,6 +761,7 @@ ApplicationWindow {
                         verticalAlignment: Text.AlignVCenter
                         text: qsTr("操作指令")
                     }
+
                     AppButton {
                         Layout.fillWidth: true
                         // 搜索中改变文案并禁用，避免重复触发
@@ -555,6 +772,7 @@ ApplicationWindow {
                             root.searchDevices();
                         }
                     }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: ScreenTools.scaleNum(6)
@@ -567,6 +785,7 @@ ApplicationWindow {
                                 setIpDialog.open();
                             }
                         }
+
                         AppButton {
                             Layout.fillWidth: true
                             text: qsTr("执行修改")
@@ -575,6 +794,7 @@ ApplicationWindow {
                                 root.ensureDeviceSelected();
                             }
                         }
+
                     }
 
                     Item {
@@ -590,6 +810,7 @@ ApplicationWindow {
                             root.ensureDeviceSelected();
                         }
                     }
+
                     AppButton {
                         Layout.fillWidth: true
                         text: qsTr("重启设备")
@@ -598,6 +819,7 @@ ApplicationWindow {
                             root.ensureDeviceSelected();
                         }
                     }
+
                     AppButton {
                         Layout.fillWidth: true
                         text: qsTr("恢复出厂设置")
@@ -606,12 +828,16 @@ ApplicationWindow {
                             root.ensureDeviceSelected();
                         }
                     }
+
                     AppButton {
                         Layout.fillWidth: true
                         text: qsTr("播放勾选设备")
                         onClicked: {
                             root.logAction(qsTr("我点击了%1按钮").arg(text));
-                            root.ensureDeviceSelected();
+                            if (!root.ensureDeviceSelected())
+                                return ;
+
+                            root.openLivePreview();
                         }
                     }
 
@@ -632,6 +858,7 @@ ApplicationWindow {
                                 osdDialog.open();
                             }
                         }
+
                         AppButton {
                             Layout.fillWidth: true
                             text: qsTr("执行修改")
@@ -640,6 +867,7 @@ ApplicationWindow {
                                 root.ensureDeviceSelected();
                             }
                         }
+
                     }
 
                     AppCheckBox {
@@ -660,6 +888,7 @@ ApplicationWindow {
                                 otherSettingsDialog.open();
                             }
                         }
+
                         AppButton {
                             Layout.fillWidth: true
                             text: qsTr("执行修改")
@@ -668,14 +897,18 @@ ApplicationWindow {
                                 root.ensureDeviceSelected();
                             }
                         }
+
                     }
 
                     Item {
                         Layout.fillHeight: true
                         Layout.minimumHeight: 0
                     }
+
                 }
+
             }
+
         }
 
         // ===== 底部：固件升级 =====
@@ -695,9 +928,8 @@ ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                     text: qsTr("升级文件")
                 }
-                AppTextField {
-                    id: upgradeFileInput
 
+                AppTextField {
                     Layout.fillWidth: true
                     Layout.columnSpan: 2
                     Layout.minimumWidth: ScreenTools.scaleNum(60)
@@ -706,6 +938,7 @@ ApplicationWindow {
                     readOnly: true
                     placeholderText: qsTr("请选择 .bin 升级文件（可多选）")
                 }
+
                 RowLayout {
                     spacing: ScreenTools.scaleNum(6)
 
@@ -716,6 +949,7 @@ ApplicationWindow {
                             upgradeFileDialog.open();
                         }
                     }
+
                     AppButton {
                         text: qsTr("文件一键升级")
                         onClicked: {
@@ -723,6 +957,7 @@ ApplicationWindow {
                             root.startFileUpgrade();
                         }
                     }
+
                 }
 
                 Label {
@@ -731,12 +966,14 @@ ApplicationWindow {
                     text: qsTr("升级目录")
                     visible: false
                 }
+
                 AppTextField {
                     Layout.fillWidth: true
                     Layout.columnSpan: 2
                     Layout.minimumWidth: ScreenTools.scaleNum(60)
                     visible: false
                 }
+
                 RowLayout {
                     spacing: ScreenTools.scaleNum(6)
                     visible: false
@@ -745,10 +982,12 @@ ApplicationWindow {
                         text: qsTr("浏览")
                         onClicked: root.logAction(qsTr("我点击了%1按钮（升级目录）").arg(text))
                     }
+
                     AppButton {
                         text: qsTr("目录升级")
                         onClicked: root.logAction(qsTr("我点击了%1按钮").arg(text))
                     }
+
                 }
 
                 AppComboBox {
@@ -758,12 +997,14 @@ ApplicationWindow {
                     visible: false
                     onActivated: root.logAction(qsTr("上传类型切换为'%1'").arg(currentText))
                 }
+
                 AppTextField {
                     Layout.fillWidth: true
                     Layout.columnSpan: 2
                     Layout.minimumWidth: ScreenTools.scaleNum(60)
                     visible: false
                 }
+
                 RowLayout {
                     spacing: ScreenTools.scaleNum(6)
                     visible: false
@@ -772,12 +1013,16 @@ ApplicationWindow {
                         text: qsTr("浏览")
                         onClicked: root.logAction(qsTr("我点击了%1按钮（上传文件）").arg(text))
                     }
+
                     AppButton {
                         text: qsTr("开始上传")
                         onClicked: root.logAction(qsTr("我点击了%1按钮").arg(text))
                     }
+
                 }
+
             }
+
         }
 
         // 底部提示
@@ -790,6 +1035,7 @@ ApplicationWindow {
             visible: false
             text: qsTr("右键可选择打开浏览器、查看下载设备二维码、远程配置操作!")
         }
+
     }
 
     // ===== 系统配置弹窗 =====
@@ -801,25 +1047,6 @@ ApplicationWindow {
         dim: true
         width: ScreenTools.scaleNum(420)
         anchors.centerIn: Overlay.overlay
-
-        // 底部按钮：自定义文案，沿用 AppButton（文本居中、超长自动换行）
-        footer: DialogButtonBox {
-            alignment: Qt.AlignRight
-            spacing: ScreenTools.scaleNum(16)
-
-            AppButton {
-                text: qsTr("取消")
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                onClicked: root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
-            }
-            AppButton {
-                text: qsTr("保存")
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                highlighted: true
-                onClicked: root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
-            }
-        }
-
         // 点击“保存”后弹出提示
         onAccepted: tipBox.show(qsTr("温馨提示"), qsTr("保存成功"))
 
@@ -834,6 +1061,7 @@ ApplicationWindow {
                 verticalAlignment: Text.AlignVCenter
                 text: qsTr("搜索时间(秒)")
             }
+
             SpinBox {
                 id: searchTimeSpin
 
@@ -860,7 +1088,7 @@ ApplicationWindow {
                     radius: ScreenTools.scaleNum(4)
                     color: searchTimeSpin.enabled ? "white" : "#f0f0f0"
                     border.width: 1
-                    border.color: (searchTimeSpin.activeFocus || searchTimeSpin.hovered) ? "#2f6fed" : "#767676"
+                    border.color: (searchTimeSpin.activeFocus || searchTimeSpin.hovered) ? "#2f6fed" : "#DCDCDC"
                 }
 
                 // 数字区：在两个按钮之间居中显示
@@ -894,6 +1122,7 @@ ApplicationWindow {
                         height: parent.height
                         color: parent.color
                     }
+
                     // 与输入区的分隔线
                     Rectangle {
                         anchors.right: parent.right
@@ -909,6 +1138,7 @@ ApplicationWindow {
                         font.pointSize: ScreenTools.scaleNum(12, true)
                         color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
                     }
+
                 }
 
                 // “+”按钮（右）：数值加 1 秒
@@ -927,6 +1157,7 @@ ApplicationWindow {
                         height: parent.height
                         color: parent.color
                     }
+
                     // 与输入区的分隔线
                     Rectangle {
                         anchors.left: parent.left
@@ -942,8 +1173,11 @@ ApplicationWindow {
                         font.pointSize: ScreenTools.scaleNum(12, true)
                         color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
                     }
+
                 }
+
             }
+
             Label {
                 Layout.preferredHeight: root.controlHeight
                 verticalAlignment: Text.AlignVCenter
@@ -955,11 +1189,13 @@ ApplicationWindow {
                 verticalAlignment: Text.AlignVCenter
                 text: qsTr("语言")
             }
+
             AppComboBox {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.controlHeight
                 model: [qsTr("简体中文"), "English"]
             }
+
             Label {
                 Layout.preferredHeight: root.controlHeight
                 verticalAlignment: Text.AlignVCenter
@@ -972,13 +1208,36 @@ ApplicationWindow {
                 text: qsTr("日志级别")
                 visible: false
             }
+
             AppComboBox {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.controlHeight
                 model: [qsTr("错误"), qsTr("警告"), qsTr("信息"), qsTr("调试")]
                 visible: false
             }
+
         }
+
+        // 底部按钮：自定义文案，沿用 AppButton（文本居中、超长自动换行）
+        footer: DialogButtonBox {
+            alignment: Qt.AlignRight
+            spacing: ScreenTools.scaleNum(16)
+
+            AppButton {
+                text: qsTr("取消")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                onClicked: root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
+            }
+
+            AppButton {
+                text: qsTr("保存")
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                highlighted: true
+                onClicked: root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
+            }
+
+        }
+
     }
 
     // ===== 通用提示弹窗 =====
@@ -996,12 +1255,9 @@ ApplicationWindow {
         selectMultiple: true
         nameFilters: [qsTr("固件文件 (*.bin)"), qsTr("所有文件 (*)")]
         folder: root.lastUpgradeDir !== "" ? ("file:///" + root.lastUpgradeDir.replace(/\\/g, "/")) : shortcuts.home
-
         onAccepted: {
             var paths = [];
-            for (var i = 0; i < upgradeFileDialog.fileUrls.length; i++)
-                paths.push(root.urlToLocalPath(upgradeFileDialog.fileUrls[i]));
-
+            for (var i = 0; i < upgradeFileDialog.fileUrls.length; i++) paths.push(root.urlToLocalPath(upgradeFileDialog.fileUrls[i]))
             root.upgradeFiles = paths;
             // 记住本次所在目录，下次打开时自动定位
             if (paths.length > 0)
@@ -1033,12 +1289,14 @@ ApplicationWindow {
     // ===== OSD修改弹窗 =====
     SetOsdDialog {
         id: osdDialog
+
         sharedOsd: osdConfig
     }
 
     // ===== 其它设置弹窗（由“配置其它参数”按钮触发） =====
     OtherSettingsDialog {
         id: otherSettingsDialog
+
         sharedOsd: osdConfig
     }
 
@@ -1067,17 +1325,16 @@ ApplicationWindow {
 
             // 转圈等待动画：蓝 -> 浅蓝渐变，顺时针匀速旋转
             Canvas {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: ScreenTools.scaleNum(48)
-                height: ScreenTools.scaleNum(48)
-                antialiasing: true
-
                 readonly property color cStart: "#2f6fed" // 蓝
                 readonly property color cEnd: "#9ed0ff" // 浅蓝
                 readonly property int segments: 24 // 分段数，越多渐变越平滑
                 readonly property real sweepDeg: 300 // 留一段缺口更像转圈
                 readonly property real lineWidth: ScreenTools.scaleNum(4)
 
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: ScreenTools.scaleNum(48)
+                height: ScreenTools.scaleNum(48)
+                antialiasing: true
                 // 逐段画圆弧并按序号插值上色，形成沿弧线的渐变
                 onPaint: {
                     var ctx = getContext("2d");
@@ -1107,6 +1364,7 @@ ApplicationWindow {
                     loops: Animation.Infinite
                     running: root.searching
                 }
+
             }
 
             Label {
@@ -1116,6 +1374,9 @@ ApplicationWindow {
                 font.family: "Microsoft YaHei"
                 font.pointSize: ScreenTools.scaleNum(12, true)
             }
+
         }
+
     }
+
 }

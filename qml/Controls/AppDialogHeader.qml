@@ -1,12 +1,12 @@
+// 弹窗自绘标题栏：屏蔽 Dialog 默认 header 后统一使用，避免每个弹窗各写一遍
+// 1) 左侧标题（微软雅黑 12pt 加粗），右侧为统一的关闭按钮 AppCloseButton
+// 2) 只负责外观与“关闭被点击”这件事，不替调用方决定关闭行为，不影响扩展性
+
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import IPCam.Public 1.0
 
-// 弹窗自绘标题栏：屏蔽 Dialog 默认 header 后统一使用，避免每个弹窗各写一遍
-// 1) 左侧标题（微软雅黑 12pt 加粗），右侧为统一的关闭按钮 AppCloseButton
-// 2) 只负责外观与“关闭被点击”这件事，不替调用方决定关闭行为，不影响扩展性
-//
 // 用法（弹窗内）：
 //     header: AppDialogHeader {
 //         title: root.title
@@ -60,5 +60,7 @@ Item {
             visible: control.showClose
             onClicked: control.closed()
         }
+
     }
+
 }

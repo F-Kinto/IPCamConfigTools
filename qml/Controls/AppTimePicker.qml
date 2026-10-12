@@ -15,117 +15,10 @@ Item {
     property int fieldWidth: ScreenTools.scaleNum(150)
     property int ctrlHeight: ScreenTools.scaleNum(28)
 
-    implicitWidth: fieldWidth
-    implicitHeight: ctrlHeight
-
-    AppTextField {
-        id: tpField
-        anchors.fill: parent
-        Layout.preferredWidth: tpRoot.fieldWidth
-        Layout.preferredHeight: tpRoot.ctrlHeight
-        readOnly: true
-        selectByMouse: false
-        text: tpRoot.time
-
-        // 点击输入框弹出时间选择面板
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: tpPopup.open()
-        }
-    }
-
-    Popup {
-        id: tpPopup
-        // 以输入框为定位父项：弹窗始终出现在输入框正下方，不遮挡输入框内容
-        parent: tpField
-        x: 0
-        y: tpField.height + ScreenTools.scaleNum(4)
-        modal: true
-        dim: false
-        focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        padding: ScreenTools.scaleNum(14)
-        // 打开时按当前时间初始化时/分/秒
-        onOpened: tpRoot.syncFromTime()
-
-        background: Rectangle {
-            radius: ScreenTools.scaleNum(4)
-            color: "#FFFFFF"
-            border.width: 1
-            border.color: "#D8DCE3"
-        }
-
-        ColumnLayout {
-            spacing: ScreenTools.scaleNum(12)
-
-            RowLayout {
-                spacing: ScreenTools.scaleNum(8)
-
-                AppComboBox {
-                    id: tpHourCombo
-                    Layout.preferredWidth: ScreenTools.scaleNum(80)
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    model: tpRoot.rangeModel(0, 23)
-                }
-                Label {
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("时")
-                }
-                AppComboBox {
-                    id: tpMinuteCombo
-                    Layout.preferredWidth: ScreenTools.scaleNum(80)
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    model: tpRoot.rangeModel(0, 59)
-                }
-                Label {
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("分")
-                }
-                AppComboBox {
-                    id: tpSecondCombo
-                    Layout.preferredWidth: ScreenTools.scaleNum(80)
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    model: tpRoot.rangeModel(0, 59)
-                }
-                Label {
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("秒")
-                }
-            }
-
-            RowLayout {
-                Layout.alignment: Qt.AlignRight
-                spacing: ScreenTools.scaleNum(8)
-
-                AppButton {
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    text: qsTr("取消")
-                    onClicked: tpPopup.close()
-                }
-                AppButton {
-                    Layout.preferredHeight: tpRoot.ctrlHeight
-                    highlighted: true
-                    text: qsTr("确定")
-                    onClicked: {
-                        tpRoot.time = tpRoot.pad(tpHourCombo.currentIndex) + ":"
-                                    + tpRoot.pad(tpMinuteCombo.currentIndex) + ":"
-                                    + tpRoot.pad(tpSecondCombo.currentIndex);
-                        tpPopup.close();
-                    }
-                }
-            }
-        }
-    }
-
     // 生成 [from, to] 的数字选项（补零显示，便于直接用作数值）
     function rangeModel(from, to) {
         var arr = [];
-        for (var i = from; i <= to; i++)
-            arr.push(pad(i));
+        for (var i = from; i <= to; i++) arr.push(pad(i))
         return arr;
     }
 
@@ -143,4 +36,125 @@ Item {
         tpMinuteCombo.currentIndex = mi;
         tpSecondCombo.currentIndex = s;
     }
+
+    implicitWidth: fieldWidth
+    implicitHeight: ctrlHeight
+
+    AppTextField {
+        id: tpField
+
+        anchors.fill: parent
+        Layout.preferredWidth: tpRoot.fieldWidth
+        Layout.preferredHeight: tpRoot.ctrlHeight
+        readOnly: true
+        selectByMouse: false
+        text: tpRoot.time
+
+        // 点击输入框弹出时间选择面板
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tpPopup.open()
+        }
+
+    }
+
+    Popup {
+        id: tpPopup
+
+        // 以输入框为定位父项：弹窗始终出现在输入框正下方，不遮挡输入框内容
+        parent: tpField
+        x: 0
+        y: tpField.height + ScreenTools.scaleNum(4)
+        modal: true
+        dim: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: ScreenTools.scaleNum(14)
+        // 打开时按当前时间初始化时/分/秒
+        onOpened: tpRoot.syncFromTime()
+
+        ColumnLayout {
+            spacing: ScreenTools.scaleNum(12)
+
+            RowLayout {
+                spacing: ScreenTools.scaleNum(8)
+
+                AppComboBox {
+                    id: tpHourCombo
+
+                    Layout.preferredWidth: ScreenTools.scaleNum(80)
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    model: tpRoot.rangeModel(0, 23)
+                }
+
+                Label {
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("时")
+                }
+
+                AppComboBox {
+                    id: tpMinuteCombo
+
+                    Layout.preferredWidth: ScreenTools.scaleNum(80)
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    model: tpRoot.rangeModel(0, 59)
+                }
+
+                Label {
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("分")
+                }
+
+                AppComboBox {
+                    id: tpSecondCombo
+
+                    Layout.preferredWidth: ScreenTools.scaleNum(80)
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    model: tpRoot.rangeModel(0, 59)
+                }
+
+                Label {
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("秒")
+                }
+
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: ScreenTools.scaleNum(8)
+
+                AppButton {
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    text: qsTr("取消")
+                    onClicked: tpPopup.close()
+                }
+
+                AppButton {
+                    Layout.preferredHeight: tpRoot.ctrlHeight
+                    highlighted: true
+                    text: qsTr("确定")
+                    onClicked: {
+                        tpRoot.time = tpRoot.pad(tpHourCombo.currentIndex) + ":" + tpRoot.pad(tpMinuteCombo.currentIndex) + ":" + tpRoot.pad(tpSecondCombo.currentIndex);
+                        tpPopup.close();
+                    }
+                }
+
+            }
+
+        }
+
+        background: Rectangle {
+            radius: ScreenTools.scaleNum(4)
+            color: "#FFFFFF"
+            border.width: 1
+            border.color: "#DCDCDC"
+        }
+
+    }
+
 }

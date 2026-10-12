@@ -4,6 +4,7 @@
         <file>SetIpDialog.qml</file>
         <file>SetOsdDialog.qml</file>
         <file>OtherSettingsDialog.qml</file>
+        <file>LivePreviewPage.qml</file>
         <file>Controls/AppButton.qml</file>
         <file>Controls/AppCheckBox.qml</file>
         <file>Controls/AppComboBox.qml</file>
@@ -15,6 +16,8 @@
         <file>Controls/AppCloseButton.qml</file>
         <file>Controls/AppDialogHeader.qml</file>
         <file>Controls/AppPanel.qml</file>
+        <file>Controls/AppContextMenu.qml</file>
+        <file>Controls/AppMenuItem.qml</file>
         <file>Controls/DeviceTable.qml</file>
     </qresource>
 </RCC>

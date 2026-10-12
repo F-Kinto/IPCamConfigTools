@@ -6,8 +6,7 @@ import IPCam.Public 1.0
 CheckBox {
     id: control
 
-    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
-                            implicitContentWidth + leftPadding + rightPadding)
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: ScreenTools.scaleNum(30)
     leftPadding: 0
     spacing: ScreenTools.scaleNum(8)
@@ -23,7 +22,7 @@ CheckBox {
         radius: ScreenTools.scaleNum(2)
         color: control.enabled ? (control.down ? "#e6e6e6" : "white") : "#f0f0f0"
         border.width: 1
-        border.color: control.enabled ? (control.activeFocus ? "#2f6fed" : "#767676") : "#c8ccd2"
+        border.color: control.enabled ? (control.activeFocus ? "#2f6fed" : "#DCDCDC") : "#DCDCDC"
 
         // 勾选图标：按盒子比例取点绘制，任意尺寸下都保持居中
         Canvas {
@@ -33,7 +32,6 @@ CheckBox {
             onVisibleChanged: requestPaint()
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
-
             onPaint: {
                 var ctx = getContext("2d");
                 ctx.reset();
@@ -58,6 +56,7 @@ CheckBox {
                 }
             }
         }
+
     }
 
     contentItem: Label {
@@ -71,4 +70,5 @@ CheckBox {
         font: control.font
         text: control.text
     }
+
 }
