@@ -8,33 +8,25 @@ History:
 1.1.0 直播窗口顶部改为标题栏（左 IP / 右关闭按钮）；右键菜单（关闭直播、
       全屏/退出全屏）；“全屏”改为铺满工作区、保留任务栏；全部直播关闭后
       自动收起“直播预览”页签（由 main.qml 监听 devices 变化处理）
-1.2.0 标题栏浮层化并自动显隐：开启直播时显示 1s 后隐藏，鼠标触碰窗口顶部
-      重新显示，停留在标题栏内不隐藏；全屏窗口同样支持；右键菜单改用
-      通用控件 AppContextMenu（白底圆角、项高 32、纯文本）
-1.2.1 右键菜单项改用 AppMenuItem：修复全屏菜单字体与非全屏不一致的问题
-      （全屏是无字体的独立 Window，Controls 会用控件字体覆盖 contentItem 字体），
-      同时修复内联菜单项不走 Menu.delegate 导致悬浮样式失效的问题；
-      全屏状态下关闭直播默认退出全屏
-1.3.0 直播页面最多 4 个窗口：超出时由 main.qml 拦截并弹窗提示，本页再做
+1.2.0 直播页面最多 4 个窗口：超出时由 main.qml 拦截并弹窗提示，本页再做
       一次截断兜底（4 台时按 2x2 排布）
+1.3.0 接入 RTSP 实时取流渲染（同步自 VmsTools RtspDecodeTask 链路）：
+      每个窗口一个 RtspVideoItem（内部 Live555 拉流 + FFmpeg 解码），
+      双击设备列表即固定走 RTSP；全屏时把渲染组件重父级到全屏窗
+      （拉流不中断），退出全屏归还给原窗口
 ********************************************************************/
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtMultimedia 5.15
 import QtQuick.Window 2.15 as AppWin
 import IPCam.Public 1.0
+import IPCam.Rtsp 1.0
 import "Controls"
 
 /**
  * 直播预览页：点击「播放勾选设备」后以「直播预览」页签打开。
  *
- * 每个勾选设备一个“直播窗口”：画面区 16:9，顶部标题栏（左：IP，右：关闭按钮，
- * 可扩展）为浮层，自动显隐——开启直播显示 1s 后隐藏；鼠标触碰窗口顶部重新
- * 显示；鼠标在标题栏内不隐藏，离开 1s 后隐藏。全屏窗口同样遵循该逻辑。
- * 右键画面弹菜单（关闭直播 / 全屏/退出全屏），双击画面切换全屏；
- * 全屏为独立无边框窗口，铺满所在显示器的工作区（保留任务栏）。
- *
- * 设备端取流协议尚未对接，画面区当前为占位内容，后续在 cell 内部接入
- * 解码渲染（VideoOutput 等）即可，对外的 devices 接口保持不变。
+ * 设备端取流已接入：每个窗口内嵌一个 RtspVideoItem（Live555 拉流 + FFmpeg 解码）
  */
 Item {
     id: root
@@ -98,9 +90,6 @@ Item {
     }
 
     // 播放列表变了：退出全屏避免停留在已失效画面上，并重新展示标题栏 1s。
-    // 注意 1：property var 的初始值赋值也会触发本信号（程序启动时），
-    //         用 visible 守卫，避免页签没打开时标题栏白闪一次
-    // 注意 2：超过 4 路直接截断（截断赋值会再触发一次本信号，走到正常分支）
     onDevicesChanged: {
         if (root.devices.length > root.maxDevices) {
             root.devices = root.devices.slice(0, root.maxDevices);
@@ -112,14 +101,25 @@ Item {
 
     }
     // 全屏/还原的实际切换：由 fullScreenIndex 驱动。
-    // visible 与 visibility 不能同时绑定（Qt 会报 conflicting properties），
-    // 且对未显示的窗口设 visibility 也不生效，所以走命令式接口
     onFullScreenIndexChanged: {
         if (root.fullScreenIndex >= 0) {
+            var cell = cellRepeater.itemAt(root.fullScreenIndex);
+            if (cell && cell.videoComp && cell.videoComp.parent !== fsVideoArea) {
+                cell.videoComp.parent = fsVideoArea;
+                cell.videoComp.anchors.fill = fsVideoArea;
+            }
             fullScreenWin.showMaximized();
             root.pokeHeader();
         } else {
             fullScreenWin.hide();
+            // 归还被借走的渲染组件（正常只可能有一路挂在全屏窗）
+            for (var i = 0; i < cellRepeater.count; i++) {
+                var c = cellRepeater.itemAt(i);
+                if (c && c.videoComp && c.videoComp.parent === fsVideoArea) {
+                    c.videoComp.parent = c;
+                    c.videoComp.anchors.fill = c;
+                }
+            }
         }
     }
 
@@ -177,17 +177,140 @@ Item {
             spacing: ScreenTools.scaleNum(4)
 
             Repeater {
+                id: cellRepeater
+
                 model: root.devices
 
                 // 单路直播窗口：整格即画面区，标题栏为顶部浮层
                 delegate: Rectangle {
+                    id: liveCell
+
                     width: (cellFlow.width - cellFlow.spacing * (root.columns - 1)) / root.columns
                     height: width * 9 / 16
                     color: "#101418"
                     border.color: "#DCDCDC"
                     border.width: 1
 
-                    // 双击全屏 / 右键菜单（铺满整格）
+                    // 供全屏切换逻辑访问本窗口的渲染组件
+                    property alias videoComp: cellVideo
+
+                    // 断流状态机：
+                    // everPlayed  出过流（区别"首连"与"偶断流"两种遮罩观感）
+                    // dead        持续 60s 无流（宽限期耗尽），转错误态等用户重连
+                    property bool everPlayed: false
+                    property bool dead: false
+
+                    // 无流 60s 计时：首连起即计；断流重计；出流即停并复活
+                    Timer {
+                        id: noVideoTimer
+
+                        interval: 60 * 1000
+                        onTriggered: liveCell.dead = true
+                    }
+                    Component.onCompleted: noVideoTimer.start()
+                    Connections {
+                        target: cellVideo
+
+                        function onHasVideoDataChanged() {
+                            if (cellVideo.hasVideoData) {
+                                liveCell.everPlayed = true;
+                                liveCell.dead = false;
+                                noVideoTimer.stop();
+                            } else if (!liveCell.dead) {
+                                noVideoTimer.restart();
+                            }
+                        }
+                    }
+
+                    // 全屏期间本窗口的渲染组件被借到全屏窗，delegate 若此时
+                    // 销毁（设备被移除）需先断流再脱离父子树，避免流泄漏
+                    Component.onDestruction: {
+                        if (cellVideo.parent !== liveCell) {
+                            cellVideo.device = ({});
+                            cellVideo.parent = null;
+                        }
+                    }
+
+                    // RTSP 拉流渲染组件：device 赋值即自动起流（拉流+解码），
+                    // 全屏重父级不影响其内部任务与帧渲染
+                    // z:1 抬到输入 MouseArea 之上：遮罩自身无输入项不拦截
+                    // 双击/右键穿透，仅"重新连接"按钮（dead 态出现）需要抢占点击
+                    RtspVideoItem {
+                        id: cellVideo
+
+                        z: 1
+                        anchors.fill: parent
+                        device: modelData
+
+                        // 画面区：VideoOutput 消费 yuvProvider 的 YUV 帧
+                        VideoOutput {
+                            anchors.fill: parent
+                            source: cellVideo.yuvProvider
+                            fillMode: VideoOutput.Stretch
+                        }
+
+                        // 无流遮罩（出流即隐藏），三态：
+                        // 1 首连（未出过流）      灰底 + 连接中...（转圈）
+                        // 2 偶断流（60s 宽限期内）冻结画面上 0.2 黑 + 连接中...（转圈）
+                        // 3 宽限期耗尽（dead）    灰底 + 视频加载错误 + 重新连接按钮
+                        Item {
+                            id: streamMask
+
+                            anchors.fill: parent
+                            visible: !cellVideo.hasVideoData
+
+                            Rectangle {
+                                anchors.fill: parent
+                                // 断流宽限期：原画面（冻结帧）叠 0.2 黑；
+                                // 首连 / 错误态：实灰底
+                                color: liveCell.everPlayed && !liveCell.dead ? "#33000000" : "#6D7682"
+                            }
+
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: ScreenTools.scaleNum(10)
+
+                                AppSpinner {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    visible: !liveCell.dead
+                                    // 无流即转（首连或断流等待），出流后遮罩隐藏自动停
+                                    running: !liveCell.dead
+                                    text: qsTr("连接中...")
+                                    textPointSize: ScreenTools.scaleNum(10, true)
+                                }
+
+                                Label {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    visible: liveCell.dead
+                                    color: "#FFFFFF"
+                                    opacity: 0.9
+                                    font.family: "Microsoft YaHei"
+                                    font.pointSize: ScreenTools.scaleNum(10, true)
+                                    text: qsTr("视频加载错误, 请重新连接")
+                                }
+
+                                AppButton {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    visible: liveCell.dead
+                                    highlighted: true
+                                    text: qsTr("重新连接")
+                                    showBorder: false
+                                    onClicked: {
+                                        // 复位为首连观感并重启 60s 计时
+                                        liveCell.dead = false;
+                                        liveCell.everPlayed = false;
+                                        noVideoTimer.restart();
+                                        cellVideo.reconnect();
+                                    }
+                                }
+
+                            }
+                        }
+
+                    }
+
+                    // 双击全屏 / 右键菜单（铺满整格）。
+                    // z 低于 cellVideo：遮罩内"重新连接"按钮优先吃到点击
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -212,47 +335,14 @@ Item {
                         onContainsMouseChanged: {
                             if (containsMouse)
                                 root.pokeHeader();
-
                         }
                     }
 
-                    // 标题栏浮层（自动显隐）
+                    // 标题栏浮层（自动显隐）。z:2 压过画面层 z:1
                     LiveTitleBar {
+                        z: 2
                         dev: modelData
                         targetIndex: index
-                    }
-
-                    // 居中占位内容（接通取流后替换为真实画面）
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: ScreenTools.scaleNum(6)
-
-                        Rectangle {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: ScreenTools.scaleNum(36)
-                            height: ScreenTools.scaleNum(24)
-                            radius: ScreenTools.scaleNum(5)
-                            color: "transparent"
-                            border.color: "#DCDCDC"
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                color: "#5A6672"
-                                font.pointSize: ScreenTools.scaleNum(10, true)
-                                text: "\u25B6"
-                            }
-
-                        }
-
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            color: "#7A828A"
-                            font.family: "Microsoft YaHei"
-                            font.pointSize: ScreenTools.scaleNum(10, true)
-                            text: qsTr("预览占位（取流未接入）")
-                        }
-
                     }
 
                 }
@@ -268,18 +358,13 @@ Item {
 
     }
 
-    // 全屏（铺满工作区、保留任务栏）的那一路，做成独立无边框窗口
+    // 全屏（铺满工作区、保留任务栏）的那一路
     AppWin.Window {
         id: fullScreenWin
-
         // 无边框 + 最大化 = 覆盖除任务栏外的整个屏幕；
-        // 用 showFullScreen() 会连任务栏一起盖掉，不符合需求
         flags: Qt.Window | Qt.FramelessWindowHint
         title: qsTr("直播预览 - 全屏")
         color: "#000000"
-        // 注意：QtQuick.Window 的 Window 没有 font 属性（只有 ApplicationWindow 有），
-        // 且独立窗口不会继承主窗口字体，所以窗口内的文字各自显式指定字体
-        // 跟随主窗口所在的显示器（多屏时不跳到主屏）
         screen: AppWin.Screen
 
         AppContextMenu {
@@ -319,42 +404,33 @@ Item {
             }
         }
 
-        // 标题栏浮层（自动显隐，与网格页共用一套状态）
+        // 标题栏浮层（自动显隐，与网格页共用一套状态）。z:2 压过画面层 z:1
         LiveTitleBar {
+            z: 2
             dev: root.fullScreenDevice
             targetIndex: root.fullScreenIndex
         }
 
-        // 居中占位内容（接通取流后整体替换）
+        // 画面容器：进入全屏时网格页对应窗口的 RtspVideoItem 会被重父级到这里（拉流不中断），退出时归还
+        Item {
+            id: fsVideoArea
+
+            z: 1
+            anchors.fill: parent
+        }
+
+        // 无画面时兜底提示（重父级失败/流中断）
         Column {
             anchors.centerIn: parent
             spacing: ScreenTools.scaleNum(12)
-
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: ScreenTools.scaleNum(96)
-                height: ScreenTools.scaleNum(64)
-                radius: ScreenTools.scaleNum(8)
-                color: "transparent"
-                border.color: "#DCDCDC"
-                border.width: 1
-
-                Text {
-                    anchors.centerIn: parent
-                    color: "#5A6672"
-                    font.family: "Microsoft YaHei"
-                    font.pointSize: ScreenTools.scaleNum(26, true)
-                    text: "\u25B6"
-                }
-
-            }
+            visible: fsVideoArea.children.length === 0
 
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: "#7A828A"
+                color: "#5A6672"
                 font.family: "Microsoft YaHei"
                 font.pointSize: ScreenTools.scaleNum(14, true)
-                text: qsTr("预览占位（取流未接入）")
+                text: qsTr("无直播画面")
             }
 
         }
@@ -393,7 +469,7 @@ Item {
     }
 
     // 标题栏浮层：左 IP，右关闭按钮（Row 内可继续追加别的功能按钮）。
-    // 网格页与全屏窗共用，dev 为该路设备，targetIndex 为 closeDevice 的序号
+    // 网格页与全屏窗共用
     component LiveTitleBar: Rectangle {
         id: titleBar
 

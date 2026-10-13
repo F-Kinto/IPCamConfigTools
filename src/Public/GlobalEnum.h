@@ -6,15 +6,6 @@ namespace EnumNameSpace {
 enum class LanguageType {
     eEnglish = 0, // 英文
     eChinese,     // 简体中文
-    eSpanish,     // 西班牙语
-    eFrench,      // 法语
-    eThailand,    // 泰语
-    eGermany,     // 德语
-    eJapan,       // 日语
-    eRussia,      // 俄语
-    eItaly,       // 意大利语
-    ePortugal,    // 葡萄牙语
-    eArabia       // 阿拉伯语
 };
 
 // 应用目录类型
@@ -23,6 +14,15 @@ enum class AppDir {
     eTest,    // 测试目录（TestDir）
     eConfig,  // 配置目录
     eLog      // 日志目录
+};
+
+// 设备 HTTP 请求 URL 模板（%1 = 设备 IP）
+enum class DeviceQuestUrl {
+    eGetDeviceInfoList,    // http://%1/goform/getAPLanP2PSupport
+    eGetDeviceFeatures,    // http://%1:9898/get?singleCMD=get_deviceFeatures
+    eGetDeviceInfo,        // http://%1/goform/getOtherSetttings?...
+    eGetJsonConfUrlWifi,   // http://%1/goform/getOtherSetttings?... (WiFi 配置)
+    eGetRtspInfoUrl,       // http://%1/goform/getOtherSetttings?singleCMD=RtspConf&userid=admin&userkey=0192023a7bbd73250516f069df18b500
 };
 
 } // namespace EnumNameSpace

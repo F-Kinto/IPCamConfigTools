@@ -143,8 +143,7 @@ ApplicationWindow {
         root.selectedRows = list;
     }
 
-    // 表格里某一行的复选框勾选/取消：同步进 selectedRows，
-    // “已选数量”与“请先选择设备”的校验都读这份数据，自动保持一致
+    // 表格里某一行的复选框勾选/取消：同步进 selectedRows，“已选数量”与“请先选择设备”的校验都读这份数据，自动保持一致
     function setRowChecked(row, checked) {
         var list = root.selectedRows.slice();
         var idx = list.indexOf(row);
@@ -155,9 +154,8 @@ ApplicationWindow {
         selectedRows = list;
     }
 
-    // ===== 选中设备的持久化（交给 C++ 的 DeviceManager）=====
+    // ===== 选中设备的持久化（C++ 的 DeviceManager）=====
     // 勾选（可多选）的设备按 uid 存进 QMap<uid, DeviceInfo>，供批量操作直接取用。
-    // 行号会随排序 / 重新搜索变化，所以这里只同步“设备本身”，不存行号
     function syncCheckedDevices() {
         var list = [];
         for (var i = 0; i < root.selectedRows.length; i++) {
@@ -202,10 +200,11 @@ ApplicationWindow {
     }
 
     // 打开直播预览页：以已勾选设备为播放列表，切到“直播预览”页签。
-    // 返回 false 表示被“最多 4 路”限制拦下（已弹窗提示，播放列表保持原样）。
-    // 注意先切页再赋播放列表：页面 visible 后 onDevicesChanged 才会展示标题栏
     function openLivePreview() {
         var checked = DeviceManager.checkedDevices();
+        // 播放前把缓存的 RTSP 凭据合并进来（设备发现时已预取，第一次起流即带真实凭据）
+        for (var i = 0; i < checked.length; i++)
+            checked[i] = DeviceManager.mergeRtspCredential(checked[i]);
         // 页签已打开时，在现有播放列表基础上追加（重复勾选的不会重复开窗口）
         var playing = root.previewOpen ? livePreviewPage.devices : [];
         // 单次勾选就超过上限
@@ -238,6 +237,8 @@ ApplicationWindow {
         if (dev === undefined)
             return ;
 
+        // 播放前把缓存的 RTSP 凭据合并进来（设备发现时已预取，第一次起流即带真实凭据）
+        dev = DeviceManager.mergeRtspCredential(dev);
         var playing = root.previewOpen ? livePreviewPage.devices : [];
         var merged = root.mergeLiveDevices(playing, [dev]);
         if (merged.length > root.maxLiveCount) {
@@ -251,7 +252,25 @@ ApplicationWindow {
         root.logAction(qsTr("双击播放直播: %1").arg(dev["ip"]));
     }
 
-    // 关闭直播预览页：回到设备列表并清空播放列表（页签栏随之隐藏）
+    // 请求关闭直播预览页：有设备在播时先弹确认（防误关正在直播的画面），
+    // 无直播或已确认则直接走 closeLivePreview
+    function requestCloseLivePreview() {
+        if (closeConfirmBox.confirmAction !== "")
+            return; // 确认弹窗已开着（防重复触发）
+        var count = livePreviewPage.devices.length;
+        if (count > 0) {
+            // 动作在弹窗属性上捕获（onClosed 清 root 状态不影响它），
+            // 供 onAccepted 区分关闭页签还是退出程序
+            closeConfirmBox.confirmAction = "tab";
+            closeConfirmBox.show(qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭吗?").arg(count));
+            root.logAction(qsTr("关闭直播预览确认弹窗: %1 台在播").arg(count));
+            return;
+        }
+        closeLivePreview();
+    }
+
+    // 关闭直播预览页：回到设备列表并清空播放列表（页签栏随之隐藏）。
+    // 清空 devices 会逐路销毁直播 delegate → RtspVideoItem 析构 → stopAndDeleteLater 安全停流（等线程退出，不崩），即"逐个安全退出"
     function closeLivePreview() {
         // 关闭全屏画面（若正开着），再隐藏页签栏
         livePreviewPage.exitFullScreen();
@@ -261,6 +280,28 @@ ApplicationWindow {
 
         livePreviewPage.devices = [];
         root.logAction(qsTr("关闭直播预览"));
+    }
+
+    // 窗口关闭拦截：有设备在播时不直接关窗，先弹确认（同关页签逻辑）
+    onClosing: {
+        // 确认弹窗已开着：拦下本次关窗，等用户先处理弹窗
+        // （不拦会绕过确认直接关掉程序）
+        if (closeConfirmBox.confirmAction !== "") {
+            close.accepted = false;
+            return;
+        }
+        var count = livePreviewPage.devices.length;
+        if (count > 0) {
+            close.accepted = false;
+            // 动作在弹窗属性上捕获（原因见 requestCloseLivePreview 注释）
+            closeConfirmBox.confirmAction = "window";
+            closeConfirmBox.show(qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭直播并退出程序吗?").arg(count));
+            root.logAction(qsTr("关闭程序确认弹窗: %1 台在播").arg(count));
+        } else {
+            // 无直播放行，但可能有刚关闭还在线程收尾的任务：
+            // 快速等一下（通常 0ms）再放行，防拆进程撞上退出中线程
+            DeviceManager.waitForLiveStreamsExit(3000);
+        }
     }
 
     // ===== 操作日志 =====
@@ -326,8 +367,7 @@ ApplicationWindow {
     }
 
     // ===== 设备搜索 =====
-    // 触发一次广播搜索：网段 = 主界面所选网卡对应的网段（选“所有网卡”则不限制），
-    // 时长 = “系统配置 - 搜索时间(秒)”；结果由下方 Connections 逐台追加进列表
+    // 触发一次广播搜索：网段 = 主界面所选网卡对应的网段（选“所有网卡”则不限制）
     function searchDevices() {
         if (root.searching)
             return ;
@@ -340,8 +380,6 @@ ApplicationWindow {
         var nicDesc = nic ? (nicName + "(" + (ips.length > 0 ? ips[0] : qsTr("无IP")) + ")") : qsTr("所有网卡");
         root.logAction(qsTr("设备搜索开始: 网卡=%1, 时长=%2秒").arg(nicDesc).arg(root.searchSeconds));
         // 清空上一次的结果、勾选与选中行
-        // （selectedRows / currentRow 归零会触发同步；这里再显式清一次，
-        //  避免“本来就是 0 / -1 不触发变化信号”导致 C++ 侧残留上一轮的设备）
         deviceModel.rows = [];
         root.selectedRows = [];
         deviceTable.currentRow = -1;
@@ -411,8 +449,10 @@ ApplicationWindow {
     }
 
     // ===== “执行修改（设定IP）”：按勾选数量给勾选设备下发新 IP =====
-    // 正在异步分配空闲 IP：true 时全窗口显示“正在分配空闲IP...”遮罩
     property bool ipAllocating: false
+
+    // ===== 退出程序 =====
+    property bool exitingProgram: false
     // 本次分配请求的起始 IP：响应靠它匹配，防止过期响应串扰
     property string ipAllocatingBaseIp: ""
 
@@ -475,6 +515,9 @@ ApplicationWindow {
     Connections {
         // 用显式函数写法（Qt 5.15 对隐式 onFoo 写法会告警）
         function onDeviceFound(device) {
+            // 设备一发现就异步预取 RTSP 凭据（存进 DeviceManager 缓存），
+            // 双击/勾选播放时通过 mergeRtspCredential 直接读缓存
+            DeviceManager.fetchRtspCredential(device);
             deviceModel.appendRow(device);
         }
 
@@ -505,6 +548,29 @@ ApplicationWindow {
         }
 
         target: ScreenTools
+    }
+
+    // RTSP 凭据兜底：设备发现时已预取，双击前通常已在缓存；若用户在凭据返回前
+    // 就双击播放（设备已用默认凭据起流），凭据到达后替换已播列表中对应设备，
+    // 触发 RtspVideoItem 用真实凭据重连
+    Connections {
+        function onRtspCredentialFetched(device) {
+            if (!root.previewOpen)
+                return;
+
+            var key = DeviceManager.keyOf(device);
+            var devices = livePreviewPage.devices;
+            var updated = [];
+            for (var i = 0; i < devices.length; i++) {
+                if (DeviceManager.keyOf(devices[i]) === key)
+                    updated.push(device);
+                else
+                    updated.push(devices[i]);
+            }
+            livePreviewPage.devices = updated;
+        }
+
+        target: DeviceManager
     }
 
     // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的“当前设备”
@@ -730,7 +796,8 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.closeLivePreview()
+                                        // 有直播时先弹确认，无直播直接关
+                                        onClicked: root.requestCloseLivePreview()
                                     }
 
                                 }
@@ -1113,17 +1180,6 @@ ApplicationWindow {
 
         }
 
-        // 底部提示
-        Label {
-            Layout.fillWidth: true
-            Layout.preferredHeight: root.controlHeight
-            verticalAlignment: Text.AlignVCenter
-            color: "#333333"
-            elide: Text.ElideRight
-            visible: false
-            text: qsTr("右键可选择打开浏览器、查看下载设备二维码、远程配置操作!")
-        }
-
     }
 
     // ===== 系统配置弹窗 =====
@@ -1152,10 +1208,8 @@ ApplicationWindow {
 
             SpinBox {
                 id: searchTimeSpin
-
                 // “− / +”按钮为正方形，边长与控件高度一致
                 readonly property int btnW: root.controlHeight
-
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.controlHeight
                 from: 5
@@ -1164,8 +1218,6 @@ ApplicationWindow {
                 stepSize: 1
                 editable: true
                 hoverEnabled: true
-                // 注意：左右内边距必须同时为“− / +”按钮留出位置。
-                // 只改 leftPadding 会让输入框（contentItem，z=2）盖住左侧的“−”按钮，导致点击无效
                 padding: 0
                 leftPadding: btnW
                 rightPadding: btnW
@@ -1193,8 +1245,6 @@ ApplicationWindow {
                 }
 
                 // “−”按钮（左）：数值减 1 秒。
-                // 四周内缩 1px，避免盖住外层边框；只圆外侧两个角（Rectangle 只支持统一圆角，
-                // 内侧用同色小方块补成直角）
                 down.indicator: Rectangle {
                     x: 1
                     y: 1
@@ -1290,20 +1340,6 @@ ApplicationWindow {
                 text: qsTr("(重启生效)")
             }
 
-            Label {
-                Layout.preferredHeight: root.controlHeight
-                verticalAlignment: Text.AlignVCenter
-                text: qsTr("日志级别")
-                visible: false
-            }
-
-            AppComboBox {
-                Layout.fillWidth: true
-                Layout.preferredHeight: root.controlHeight
-                model: [qsTr("错误"), qsTr("警告"), qsTr("信息"), qsTr("调试")]
-                visible: false
-            }
-
         }
 
         // 底部按钮：自定义文案，沿用 AppButton（文本居中、超长自动换行）
@@ -1336,6 +1372,29 @@ ApplicationWindow {
         id: tipBox
     }
 
+    // ===== 关闭确认弹窗（关直播页签 / 关程序共用）=====
+    AppMessageBox {
+        id: closeConfirmBox
+        // 待执行动作："tab"=关直播页签、"window"=退程序（show 前赋值）
+        property string confirmAction: ""
+        twoButtons: true
+        onAccepted: {
+            var action = closeConfirmBox.confirmAction;
+            closeConfirmBox.confirmAction = "";
+            // 安全退出正在直播的设备
+            closeLivePreview();
+            if (action === "window") {
+                root.exitingProgram = true;
+                exitWaitTimer.restart();
+            }
+        }
+
+        onRejected: {
+            // 取消：撤回关闭操作，直播保持原样
+            closeConfirmBox.confirmAction = "";
+        }
+    }
+
     // ===== 升级文件选择框 =====
     // 1) 只筛 *.bin；2) 默认打开上次所在目录（ConfigureManager 持久化），没记录时用“我的文档”
     // 3) selectMultiple 支持一次选多个文件
@@ -1365,9 +1424,6 @@ ApplicationWindow {
 
     // ===== 设定IP弹窗的探测遮罩 =====
     // 点“确定”后异步探测 IP 占用期间，盖住整个弹窗（含标题栏与关闭按钮）并吞掉鼠标事件。
-    // 必须声明在 window 层：Dialog 声明内的普通 Item 会被 Popup 的 contentData 机制收编进
-    // contentItem，parent: Overlay.overlay 无法可靠生效；window 子项上下文中 Overlay.overlay
-    // 可立即解析。遮罩与弹窗同在 Overlay 层、同样居中、尺寸跟随弹窗，z 抬高即盖住全部内容
     AppBusyMask {
         parent: Overlay.overlay
         anchors.centerIn: parent
@@ -1397,20 +1453,16 @@ ApplicationWindow {
     // ===== OSD修改弹窗 =====
     SetOsdDialog {
         id: osdDialog
-
         sharedOsd: osdConfig
     }
 
     // ===== 其它设置弹窗（由“配置其它参数”按钮触发） =====
     OtherSettingsDialog {
         id: otherSettingsDialog
-
         sharedOsd: osdConfig
     }
 
     // ===== 设备搜索遮罩 =====
-    // 搜索期间覆盖整个窗口并吞掉鼠标事件，避免误点其它按钮；
-    // 搜索结束（DeviceScanner.searchFinished -> root.searching = false）后自动消失
     AppBusyMask {
         anchors.fill: parent
         z: 100
@@ -1418,14 +1470,37 @@ ApplicationWindow {
         text: qsTr("设备搜索中...")
     }
 
-    // ===== 执行修改（设定IP）的分配遮罩 =====
-    // 勾选多台点“执行修改”后异步凑空闲 IP 期间，覆盖整个窗口并吞掉鼠标事件；
-    // 结果回来（ScreenTools.signalFreeIpsFound -> root.ipAllocating = false）后自动消失
+    // ===== 执行多台修改（设定IP）的遮罩 =====
     AppBusyMask {
         anchors.fill: parent
         z: 100
         busy: root.ipAllocating
         text: qsTr("正在分配空闲IP...")
+    }
+
+    // ===== 退出程序等待定时器 =====
+    Timer {
+        id: exitWaitTimer
+
+        interval: 50
+
+        onTriggered: {
+            // 阻塞等所有拉流线程真实退出再退程序（不是固定延时盲等—Live555 慢退出时进程拆除线程仍在跑会崩）。无任务立即返回
+            var ok = DeviceManager.waitForLiveStreamsExit(10 * 1000);
+            root.logAction(ok ? qsTr("直播线程已全部退出，程序退出")
+                              : qsTr("等待直播线程退出超时(10s)，兜底退出"));
+            Qt.quit();
+        }
+    }
+
+    // ===== 退出程序等待遮罩 =====
+    // 确认退出后阻塞等待拉流线程退出期间，覆盖整个窗口并吞掉鼠标事件；
+    // 等待结束（无论成功/超时）随即 Qt.quit()，进程退出，无需复位路径
+    AppBusyMask {
+        anchors.fill: parent
+        z: 100
+        busy: root.exitingProgram
+        text: qsTr("正在退出...")
     }
 
 }

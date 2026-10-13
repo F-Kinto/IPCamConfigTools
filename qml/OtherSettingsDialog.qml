@@ -149,9 +149,6 @@ Dialog {
         root.checkedMap = m;
     }
 
-    // 识别需要持久化的控件类型，返回 "" 表示不持久化
-    //   time -> AppTimePicker；checked -> AppCheckBox；currentIndex -> AppComboBox
-    //   ip -> AppIpInput；text -> AppTextField
     function persistedKind(obj) {
         // 密码框不持久化
         if (obj.echoMode !== undefined && obj.echoMode === TextInput.Password)
@@ -181,8 +178,7 @@ Dialog {
         return obj instanceof Popup || obj instanceof ListView || obj instanceof Menu || obj instanceof ItemDelegate || obj instanceof AbstractButton || obj instanceof ScrollBar || obj instanceof ScrollIndicator || obj instanceof Tumbler || obj instanceof Repeater;
     }
 
-    // 取子对象列表：ScrollView/Flickable/Control 等控件的声明式子项在 contentData/contentItem 中，
-    // 不在 data 中，这里合并三者，保证表单能被完整遍历到
+    // 取子对象列表
     function childList(obj) {
         var list = [];
         var i;
@@ -3445,18 +3441,16 @@ Dialog {
     }
 
     // 密码输入框：复用统一封装的 AppPasswordField
-    // （AppTextField 基于 TextArea，不支持 echoMode 掩码，密码输入用 TextField 实现）
     component PwdInput: AppPasswordField {
         Layout.minimumHeight: root.ctrlH
         Layout.preferredHeight: root.ctrlH
     }
 
-    // 屏蔽 Dialog 默认标题栏，改用统一封装的标题栏（含关闭按钮）
     header: AppDialogHeader {
         title: root.title
         onClosed: root.reject()
 
-        // 保存成功提示弹窗：放在标题栏容器内，避免进入内容区的布局被 RowLayout 排版
+        // 保存成功提示弹窗
         AppMessageBox {
             id: saveTipBox
         }

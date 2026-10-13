@@ -22,12 +22,6 @@ namespace {
 // 日志文件固定名称
 const char* kLogFileName = "LogText.txt";
 
-// 输出一行日志到调试控制台。
-// 每条日志只走一个通道，避免捕获工具同时抓到调试串和 stderr 时显示两遍：
-// 1) 挂在调试器下：只走 OutputDebugStringW（Unicode，VS“输出”窗口/调试查看器正常显示）；
-// 2) 普通控制台：WriteConsoleW（Unicode 直写缓冲区，不受控制台 GBK 代码页影响）；
-// 3) stderr 被重定向到文件/管道时（WriteConsoleW 失败）：fprintf 按本地编码（GBK）输出，
-//    与 Windows 控制台的默认解码习惯一致。
 void outputToDebugConsole(const QString& record)
 {
 #ifdef Q_OS_WIN

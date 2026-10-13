@@ -1,11 +1,5 @@
 // 通用右键菜单：白底、圆角 4px、菜单项高 32px、只保留文本（不带图标）。
 // 菜单项悬浮时浅蓝底 + 蓝字（与主界面页签选中色一致）。
-// 注意 1：字体必须设在 Menu 控件自身（而不是只设在 contentItem 上）——
-// QtQuick.Controls 会把控件的 font 覆盖到 contentItem 上，只设 contentItem
-// 会被宿主窗口字体顶掉（实测：同一个控件挂在普通 Window 里会变 SimSun/9pt）。
-// 注意 2：菜单项必须用配套的 AppMenuItem 声明。Menu.delegate 只对
-// addItem()/Instantiator 产生的项生效，内联声明的 MenuItem 不走 delegate
-// （实测会退回默认样式），所以内联项一律写 AppMenuItem。
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15

@@ -196,6 +196,25 @@ QString ConfigureManager::getAppDir(const EnumNameSpace::AppDir& cmd)
     return qApp->applicationDirPath() + "/" + "TestDir/";
 }
 
+QString ConfigureManager::getDeviceUrl(const EnumNameSpace::DeviceQuestUrl& cmd)
+{
+    // URL 模板：%1 占位为设备 IP，调用方用 .arg(ip) 替换
+    switch (cmd) {
+        case EnumNameSpace::DeviceQuestUrl::eGetDeviceInfoList:
+            return "http://%1/goform/getAPLanP2PSupport";
+        case EnumNameSpace::DeviceQuestUrl::eGetDeviceFeatures:
+            return "http://%1:9898/get?singleCMD=get_deviceFeatures";
+        case EnumNameSpace::DeviceQuestUrl::eGetDeviceInfo:
+            return "http://%1/goform/getOtherSetttings?singleCMD=get_data_json&userid=admin&userkey=0192023a7bbd73250516f069df18b500&json_string=DeviceInfo";
+        case EnumNameSpace::DeviceQuestUrl::eGetJsonConfUrlWifi:
+            return "http://%1/goform/getOtherSetttings?singleCMD=get_data_json&userid=admin&userkey=0192023a7bbd73250516f069df18b500&json_string=Wifi";
+        case EnumNameSpace::DeviceQuestUrl::eGetRtspInfoUrl:
+            return "http://%1/goform/getOtherSetttings?singleCMD=RtspConf&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
+        default:
+            return "";
+    }
+}
+
 QString ConfigureManager::settingFilePath() const
 {
     return m_settingFilePath;

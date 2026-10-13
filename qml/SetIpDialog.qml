@@ -272,8 +272,7 @@ Dialog {
                     highlighted: true
                     text: qsTr("确定")
                     onClicked: {
-                        // 先开遮罩再异步探测：SendARP 是同步阻塞调用（无人应答时等较久），
-                        // 直接在这里调会冻结界面与转圈动画；结果在下方 Connections 里处理
+                        // 先开遮罩再异步探测：SendARP 是同步阻塞调用（无人应答时等较久）
                         root.pendingIp = ipInput.text();
                         root.showMask = true;
                         ScreenTools.checkIpOccupiedAsync(root.pendingIp);
@@ -294,10 +293,7 @@ Dialog {
 
     }
 
-    // 探测期间的遮罩（AppBusyMask）声明在使用处 main.qml：
-    // Dialog 声明内的普通 Item 会被 Popup 的 contentData 机制收编进 contentItem，
-    // parent: Overlay.overlay 在弹窗挂到 window 前解析不到而失效，遮罩无法盖住弹窗；
-    // 在 window 子项上下文中声明则 Overlay.overlay 可立即解析，稳定挂在 Overlay 层
+    // 探测期间的遮罩（AppBusyMask）声明在使用处 main.qml
 
     // ===== 异步探测 IP 占用的结果处理 =====
     // 后台线程探测完成后经 ScreenTools.signalIpOccupied 回到这里；

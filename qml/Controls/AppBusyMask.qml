@@ -1,5 +1,4 @@
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import IPCam.Public 1.0
 
 // 通用忙碌遮罩：黑底 50% 半透明覆盖层 + 转圈等待动画 + 提示文本
@@ -32,63 +31,12 @@ Item {
         anchors.fill: parent
     }
 
-    Column {
+    // 转圈 + 提示文本（转圈样式与文本样式统一收在 AppSpinner）
+    AppSpinner {
         anchors.centerIn: parent
         spacing: ScreenTools.scaleNum(12)
-
-        // 转圈等待动画：蓝 -> 浅蓝渐变，顺时针匀速旋转
-        Canvas {
-            readonly property color cStart: "#2f6fed" // 蓝
-            readonly property color cEnd: "#9ed0ff" // 浅蓝
-            readonly property int segments: 24 // 分段数，越多渐变越平滑
-            readonly property real sweepDeg: 300 // 留一段缺口更像转圈
-            readonly property real lineWidth: ScreenTools.scaleNum(4)
-
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: ScreenTools.scaleNum(48)
-            height: ScreenTools.scaleNum(48)
-            antialiasing: true
-            // 逐段画圆弧并按序号插值上色，形成沿弧线的渐变
-            onPaint: {
-                var ctx = getContext("2d");
-                ctx.reset();
-                ctx.lineWidth = lineWidth;
-                ctx.lineCap = "round";
-                var cx = width / 2;
-                var cy = height / 2;
-                var r = (Math.min(width, height) - lineWidth) / 2;
-                var step = (sweepDeg / segments) * Math.PI / 180;
-                var from = -Math.PI / 2; // 12 点方向起笔
-                for (var i = 0; i < segments; i++) {
-                    var t = i / (segments - 1);
-                    ctx.strokeStyle = Qt.rgba(cStart.r + (cEnd.r - cStart.r) * t, cStart.g + (cEnd.g - cStart.g) * t, cStart.b + (cEnd.b - cStart.b) * t, 1).toString();
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, r, from + i * step, from + (i + 1) * step);
-                    ctx.stroke();
-                }
-            }
-            Component.onCompleted: requestPaint()
-
-            // 中等转速：1.2 秒一圈；busy 结束自动停转
-            RotationAnimation on rotation {
-                from: 0
-                to: 360
-                duration: 1200
-                loops: Animation.Infinite
-                running: root.busy
-            }
-
-        }
-
-        Label {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: root.text !== ""
-            text: root.text
-            color: "white"
-            font.family: "Microsoft YaHei"
-            font.pointSize: ScreenTools.scaleNum(12, true)
-        }
-
+        running: root.busy
+        text: root.text
     }
 
 }

@@ -15,9 +15,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import IPCam.Public 1.0
 
-//       // 以下内容进入中部参数区
-//       RowLayout { ... }
-//   }
 ColumnLayout {
     id: panel
 

@@ -19,6 +19,7 @@
         <file>Controls/AppPanel.qml</file>
         <file>Controls/AppContextMenu.qml</file>
         <file>Controls/AppMenuItem.qml</file>
+        <file>Controls/AppSpinner.qml</file>
         <file>Controls/DeviceTable.qml</file>
     </qresource>
 </RCC>

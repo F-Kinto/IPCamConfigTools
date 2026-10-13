@@ -36,35 +36,7 @@ void TranslatorManager::initSystemDefaultLanguage()
         ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eChinese);
     } else if (QLocale::system().language() == QLocale::English) {
         ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eEnglish);
-    } else if (QLocale::system().language() == QLocale::Spanish) {
-        // 西班牙语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eSpanish);
-    } else if (QLocale::system().language() == QLocale::French) {
-        // 法语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eFrench);
-    } else if (QLocale::system().language() == QLocale::Thai) {
-        // 泰语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eThailand);
-    } else if (QLocale::system().language() == QLocale::German) {
-        // 德语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eGermany);
-    } else if (QLocale::system().language() == QLocale::Japanese) {
-        // 日语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eJapan);
-    } else if (QLocale::system().language() == QLocale::Russian) {
-        // 俄罗斯语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eRussia);
-    } else if (QLocale::system().language() == QLocale::Italian) {
-        // 意大利语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eItaly);
-    } else if (QLocale::system().language() == QLocale::Portuguese) {
-        // 葡萄牙语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::ePortugal);
-    } else if (QLocale::system().language() == QLocale::Arabic) {
-        // 阿拉伯语
-        ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eArabia);
-    }
-    else {
+    } else {
         // 默认使用英文，如果检测道到语言失败不支持或者失败，则使用英文
         ConfigureManager::instance()->setLanguageType((int)EnumNameSpace::LanguageType::eEnglish);
     }
@@ -76,57 +48,7 @@ void TranslatorManager::setInitLangusge()
         changeLanguage("EN", "en"); //英文
     } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eChinese) {
         changeLanguage("zh_CN", "zh_CN"); // 中文
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eSpanish) {
-        changeLanguage("ESP", "es"); // 西班牙
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eFrench) {
-        changeLanguage("FR", "fr"); // 法语
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eThailand) {
-        changeLanguage("TH", "th"); // 泰语
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eGermany) {
-        changeLanguage("DE", "de"); // 德语
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eJapan) {
-        changeLanguage("JA", "ja"); // 日本語
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eRussia) {
-        changeLanguage("RU", "ru"); // 俄语
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eItaly) {
-        changeLanguage("IT", "it"); // 意大利语
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::ePortugal) {
-        changeLanguage("PT", "pt"); // 葡萄牙语
-    } else if (ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eArabia) {
-        changeLanguage("AR", "ar"); // 阿拉伯语
     }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eVietnam)
-    // {
-    // 	changeLanguage("VI", "vi"); // 越南语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eMalaysia)
-    // {
-    // 	changeLanguage("MS", "ms"); // 马来语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::ePoland)
-    // {
-    // 	changeLanguage("PL", "pl"); // 波兰语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eIndia)
-    // {
-    // 	changeLanguage("IN", "hi"); // 印第安语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eIsrael)
-    // {
-    // 	changeLanguage("HE", "he"); // 希伯来语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eKorea)
-    // {
-    // 	changeLanguage("KO", "ko"); // 韩语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eIndonesia)
-    // {
-    // 	changeLanguage("ID", "id"); // 印尼语
-    // }
-    // else if(ConfigureManager::instance()->languageType() == (int)EnumNameSpace::LanguageType::eDutch)
-    // {
-    // 	changeLanguage("NL", "nl"); // 荷兰语
-    // }
     else {
         // 默认为英文
         changeLanguage("EN", "en");
