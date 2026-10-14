@@ -110,7 +110,7 @@ Dialog {
                 horizontalAlignment: Text.AlignHCenter
                 font.family: "Microsoft YaHei"
                 font.bold: false
-                font.pointSize: ScreenTools.scaleNum(12, true)
+                font.pointSize: ScreenTools.scaleNum(10, true)
                 color: "#333333"
                 wrapMode: Text.WrapAnywhere
                 text: root.message

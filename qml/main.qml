@@ -210,14 +210,14 @@ ApplicationWindow {
         var playing = root.previewOpen ? livePreviewPage.devices : [];
         // 单次勾选就超过上限
         if (checked.length > root.maxLiveCount) {
-            tipBox.show(qsTr("温馨提示"), qsTr("最多同时播放%1台设备").arg(root.maxLiveCount));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("最多同时播放%1台设备").arg(root.maxLiveCount));
             root.logAction(qsTr("打开直播预览失败: 勾选%1台，超过上限%2台").arg(checked.length).arg(root.maxLiveCount));
             return false;
         }
         // 合并后仍超过上限：已播满，需先关闭空闲的直播通道
         var merged = root.mergeLiveDevices(playing, checked);
         if (merged.length > root.maxLiveCount) {
-            tipBox.show(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
             root.logAction(qsTr("打开直播预览失败: 已播放%1台，再播%2台会超过上限%3台").arg(playing.length).arg(merged.length - playing.length).arg(root.maxLiveCount));
             return false;
         }
@@ -243,7 +243,7 @@ ApplicationWindow {
         var playing = root.previewOpen ? livePreviewPage.devices : [];
         var merged = root.mergeLiveDevices(playing, [dev]);
         if (merged.length > root.maxLiveCount) {
-            tipBox.show(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
             root.logAction(qsTr("双击播放失败: 已播放%1台，超出上限%2台").arg(playing.length).arg(root.maxLiveCount));
             return ;
         }
@@ -256,14 +256,9 @@ ApplicationWindow {
     // 请求关闭直播预览页：有设备在播时先弹确认（防误关正在直播的画面），
     // 无直播或已确认则直接走 closeLivePreview
     function requestCloseLivePreview() {
-        if (closeConfirmBox.confirmAction !== "")
-            return; // 确认弹窗已开着（防重复触发）
         var count = livePreviewPage.devices.length;
         if (count > 0) {
-            // 动作在弹窗属性上捕获（onClosed 清 root 状态不影响它），
-            // 供 onAccepted 区分关闭页签还是退出程序
-            closeConfirmBox.confirmAction = "tab";
-            closeConfirmBox.show(qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭吗?").arg(count));
+            confirmBox.showConfirm("tab", qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭吗?").arg(count));
             root.logAction(qsTr("关闭直播预览确认弹窗: %1 台在播").arg(count));
             return;
         }
@@ -287,16 +282,14 @@ ApplicationWindow {
     onClosing: {
         // 确认弹窗已开着：拦下本次关窗，等用户先处理弹窗
         // （不拦会绕过确认直接关掉程序）
-        if (closeConfirmBox.confirmAction !== "") {
+        if (confirmBox.confirmAction !== "") {
             close.accepted = false;
             return;
         }
         var count = livePreviewPage.devices.length;
         if (count > 0) {
             close.accepted = false;
-            // 动作在弹窗属性上捕获（原因见 requestCloseLivePreview 注释）
-            closeConfirmBox.confirmAction = "window";
-            closeConfirmBox.show(qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭直播并退出程序吗?").arg(count));
+            confirmBox.showConfirm("window", qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭直播并退出程序吗?").arg(count));
         } else {
             // 无直播放行，但可能有刚关闭还在线程收尾的任务：
             // 快速等一下（通常 0ms）再放行，防拆进程撞上退出中线程
@@ -425,7 +418,7 @@ ApplicationWindow {
     // “文件一键升级”：先校验升级文件，再校验设备，最后执行升级
     function startFileUpgrade() {
         if (root.upgradeFiles.length === 0) {
-            tipBox.show(qsTr("温馨提示"), qsTr("请先选择升级文件"));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("请先选择升级文件"));
             return ;
         }
         if (!root.ensureDeviceSelected())
@@ -437,7 +430,7 @@ ApplicationWindow {
     // 设备操作前置校验：列表为空或没勾选任何设备时提示，返回 false 表示中断
     function ensureDeviceSelected() {
         if (deviceModel.rowCount === 0 || root.selectedCount === 0) {
-            tipBox.show(qsTr("温馨提示"), qsTr("请先选择设备"));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("请先选择设备"));
             return false;
         }
         return true;
@@ -461,21 +454,36 @@ ApplicationWindow {
         }
     }
 
-    // “执行修改”点击入口：没勾选提示；1 台直接下发弹窗保存的 IP；
-    // 多台从该 IP 起凑等量空闲 IP（末段叠加到 .254，不足再递减到 .1）后逐台下发
+    // “执行修改”点击入口：没设IP先提示；没勾选时列表为空直接提示，
+    // 有设备则弹“是|否”确认是否全选（是→全选并继续）；已勾选直接执行。
+    // 1 台直接下发弹窗保存的 IP；多台从该 IP 起凑等量空闲 IP（末段叠加
+    // 到 .254，不足再递减到 .1）后逐台下发
     function executeSetIp() {
-        if (!root.ensureDeviceSelected())
-            return ;
         if (setIpDialog.savedParams === null) {
-            tipBox.show(qsTr("温馨提示"), qsTr("请先在[设定IP]中设定IP地址"));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("请先在[设定IP]中设定IP地址"));
             return ;
         }
+        // 列表为空没有可全选的设备，维持单按钮提示
+        if (deviceModel.rowCount === 0) {
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("请先选择设备"));
+            return ;
+        }
+        // 没勾选任何设备：询问是否全选（是|否），点是走全选后继续
+        if (root.selectedCount === 0) {
+            confirmBox.showConfirm("setIpSelectAll", qsTr("温馨提示"), qsTr("请先选择设备, 是否选择所有设备?"), qsTr("是"), qsTr("否"));
+            return ;
+        }
+        root.executeSetIpChecked();
+    }
 
+    // 修改IP执行主体：勾选与 IP 均已就绪，按台数分流。
+    // 供 executeSetIp 与“是→全选”确认框共用
+    function executeSetIpChecked() {
         var baseIp = setIpDialog.savedParams["ip"];
         if (root.selectedCount === 1) {
             // 单台：直接发送该设备 id 与设定IP里的地址
             root.sendSetIpRequests([baseIp]);
-            tipBox.show(qsTr("温馨提示"), qsTr("修改IP地址请求已发送, 请等待设备响应"));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("修改IP地址请求已发送, 请等待设备响应"));
         } else {
             // 多台：先开遮罩再异步凑空闲 IP，结果在 Connections 的 onSignalFreeIpsFound 处理
             root.ipAllocatingBaseIp = baseIp;
@@ -529,12 +537,12 @@ ApplicationWindow {
             root.ipAllocatingBaseIp = "";
             if (freeIps.length < wanted) {
                 // 网段内空闲 IP 不够：提示后中断，可换起始 IP 重试
-                tipBox.show(qsTr("温馨提示"), qsTr("网段内空闲IP不足(需%1个, 只找到%2个), 请调整起始IP").arg(wanted).arg(freeIps.length));
+                confirmBox.showTip(qsTr("温馨提示"), qsTr("网段内空闲IP不足(需%1个, 只找到%2个), 请调整起始IP").arg(wanted).arg(freeIps.length));
                 return ;
             }
             // 勾选行（表格顺序）与空闲 IP（发现顺序）一一配对下发
             root.sendSetIpRequests(freeIps);
-            tipBox.show(qsTr("温馨提示"), qsTr("批量修改IP请求已发送, 请等待设备响应"));
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("批量修改IP请求已发送, 请等待设备响应"));
         }
 
         target: ScreenTools
@@ -983,7 +991,9 @@ ApplicationWindow {
                         text: qsTr("重启设备")
                         onClicked: {
                             root.logAction(qsTr("我点击了%1按钮").arg(text));
-                            root.ensureDeviceSelected();
+                            if (!root.ensureDeviceSelected())
+                                return ;
+                            confirmBox.showConfirm("reboot", qsTr("温馨提示"), qsTr("确定要重启已勾选的设备吗?"));
                         }
                     }
 
@@ -992,7 +1002,9 @@ ApplicationWindow {
                         text: qsTr("恢复出厂设置")
                         onClicked: {
                             root.logAction(qsTr("我点击了%1按钮").arg(text));
-                            root.ensureDeviceSelected();
+                            if (!root.ensureDeviceSelected())
+                                return ;
+                            confirmBox.showConfirm("factoryReset", qsTr("温馨提示"), qsTr("恢复出厂设置后设备会重启且设备IP可能变更, 需要重新搜索设备, 确定要对已勾选的设备执行该操作吗?"));
                         }
                     }
 
@@ -1195,7 +1207,7 @@ ApplicationWindow {
 
     }
 
-    // ===== 系统配置弹窗 =====
+    // ===== 系统配置弹窗=====
     Dialog {
         id: systemConfigDialog
 
@@ -1204,212 +1216,297 @@ ApplicationWindow {
         dim: true
         width: ScreenTools.scaleNum(420)
         anchors.centerIn: Overlay.overlay
+        clip: true
+        closePolicy: Popup.CloseOnEscape
+        padding: ScreenTools.scaleNum(16)
+        contentHeight: contentLayout.implicitHeight
         // 点击“保存”后弹出提示
-        onAccepted: tipBox.show(qsTr("温馨提示"), qsTr("保存成功"))
+        onAccepted: confirmBox.showTip(qsTr("温馨提示"), qsTr("保存成功"))
 
-        GridLayout {
-            columns: 3
-            columnSpacing: ScreenTools.scaleNum(10)
-            rowSpacing: ScreenTools.scaleNum(10)
+        background: Rectangle {
+            radius: ScreenTools.scaleNum(4)
+            color: "#FFFFFF"
+            border.width: 1
+            border.color: "#DCDCDC"
+        }
+
+        // 屏蔽 Dialog 默认标题栏，改用统一封装的标题栏（含关闭按钮）
+        header: AppDialogHeader {
+            title: systemConfigDialog.title
+            onClosed: systemConfigDialog.reject()
+        }
+
+        footer: Item {
+            height: 0
+        }
+
+        contentItem: ColumnLayout {
+            id: contentLayout
+
             width: systemConfigDialog.availableWidth
+            spacing: ScreenTools.scaleNum(12)
 
-            Label {
-                Layout.preferredHeight: root.controlHeight
-                verticalAlignment: Text.AlignVCenter
-                text: qsTr("搜索时间(秒)")
-            }
-
-            SpinBox {
-                id: searchTimeSpin
-                // “− / +”按钮为正方形，边长与控件高度一致
-                readonly property int btnW: root.controlHeight
+            GridLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.controlHeight
-                from: 5
-                to: 120
-                value: 5
-                stepSize: 1
-                editable: true
-                hoverEnabled: true
-                padding: 0
-                leftPadding: btnW
-                rightPadding: btnW
-                font.family: "Microsoft YaHei"
-                font.pointSize: ScreenTools.scaleNum(10, true)
+                columns: 3
+                columnSpacing: ScreenTools.scaleNum(10)
+                rowSpacing: ScreenTools.scaleNum(10)
 
-                background: Rectangle {
-                    radius: ScreenTools.scaleNum(4)
-                    color: searchTimeSpin.enabled ? "white" : "#f0f0f0"
-                    border.width: 1
-                    border.color: (searchTimeSpin.activeFocus || searchTimeSpin.hovered) ? "#2f6fed" : "#DCDCDC"
-                }
-
-                // 数字区：在两个按钮之间居中显示
-                contentItem: TextInput {
-                    z: 2
-                    text: searchTimeSpin.displayText
-                    font: searchTimeSpin.font
-                    color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
-                    horizontalAlignment: Qt.AlignHCenter
+                Label {
+                    Layout.preferredHeight: root.controlHeight
                     verticalAlignment: Text.AlignVCenter
-                    readOnly: !searchTimeSpin.editable
-                    validator: searchTimeSpin.validator
-                    selectByMouse: true
+                    text: qsTr("搜索时间(秒)")
                 }
 
-                // “−”按钮（左）：数值减 1 秒。
-                down.indicator: Rectangle {
-                    x: 1
-                    y: 1
-                    width: searchTimeSpin.btnW - 2
-                    height: searchTimeSpin.height - 2
-                    radius: ScreenTools.scaleNum(3)
-                    color: searchTimeSpin.down.pressed ? "#BBD4FF" : "#F5F7FA"
+                SpinBox {
+                    id: searchTimeSpin
+                    // “− / +”按钮为正方形，边长与控件高度一致
+                    readonly property int btnW: root.controlHeight
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.controlHeight
+                    from: 5
+                    to: 120
+                    value: 5
+                    stepSize: 1
+                    editable: true
+                    hoverEnabled: true
+                    padding: 0
+                    leftPadding: btnW
+                    rightPadding: btnW
+                    font.family: "Microsoft YaHei"
+                    font.pointSize: ScreenTools.scaleNum(10, true)
 
-                    // 补齐内侧两个直角
-                    Rectangle {
-                        anchors.right: parent.right
-                        width: parent.radius
-                        height: parent.height
-                        color: parent.color
+                    background: Rectangle {
+                        radius: ScreenTools.scaleNum(4)
+                        color: searchTimeSpin.enabled ? "white" : "#f0f0f0"
+                        border.width: 1
+                        border.color: (searchTimeSpin.activeFocus || searchTimeSpin.hovered) ? "#2f6fed" : "#DCDCDC"
                     }
 
-                    // 与输入区的分隔线
-                    Rectangle {
-                        anchors.right: parent.right
-                        width: 1
-                        height: parent.height
-                        color: "#D8DCE3"
-                    }
-
-                    Label {
-                        anchors.centerIn: parent
-                        text: "-"
-                        font.bold: true
-                        font.pointSize: ScreenTools.scaleNum(12, true)
+                    // 数字区：在两个按钮之间居中显示
+                    contentItem: TextInput {
+                        z: 2
+                        text: searchTimeSpin.displayText
+                        font: searchTimeSpin.font
                         color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
+                        horizontalAlignment: Qt.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        readOnly: !searchTimeSpin.editable
+                        validator: searchTimeSpin.validator
+                        selectByMouse: true
+                    }
+
+                    // “−”按钮（左）：数值减 1 秒。
+                    down.indicator: Rectangle {
+                        x: 1
+                        y: 1
+                        width: searchTimeSpin.btnW - 2
+                        height: searchTimeSpin.height - 2
+                        radius: ScreenTools.scaleNum(3)
+                        color: searchTimeSpin.down.pressed ? "#BBD4FF" : "#F5F7FA"
+
+                        // 补齐内侧两个直角
+                        Rectangle {
+                            anchors.right: parent.right
+                            width: parent.radius
+                            height: parent.height
+                            color: parent.color
+                        }
+
+                        // 与输入区的分隔线
+                        Rectangle {
+                            anchors.right: parent.right
+                            width: 1
+                            height: parent.height
+                            color: "#D8DCE3"
+                        }
+
+                        Label {
+                            anchors.centerIn: parent
+                            text: "-"
+                            font.bold: true
+                            font.pointSize: ScreenTools.scaleNum(12, true)
+                            color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
+                        }
+
+                    }
+
+                    // “+”按钮（右）：数值加 1 秒
+                    up.indicator: Rectangle {
+                        x: searchTimeSpin.width - width - 1
+                        y: 1
+                        width: searchTimeSpin.btnW - 2
+                        height: searchTimeSpin.height - 2
+                        radius: ScreenTools.scaleNum(3)
+                        color: searchTimeSpin.up.pressed ? "#BBD4FF" : "#F5F7FA"
+
+                        // 补齐内侧两个直角
+                        Rectangle {
+                            anchors.left: parent.left
+                            width: parent.radius
+                            height: parent.height
+                            color: parent.color
+                        }
+
+                        // 与输入区的分隔线
+                        Rectangle {
+                            anchors.left: parent.left
+                            width: 1
+                            height: parent.height
+                            color: "#D8DCE3"
+                        }
+
+                        Label {
+                            anchors.centerIn: parent
+                            text: "+"
+                            font.bold: true
+                            font.pointSize: ScreenTools.scaleNum(12, true)
+                            color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
+                        }
+
                     }
 
                 }
 
-                // “+”按钮（右）：数值加 1 秒
-                up.indicator: Rectangle {
-                    x: searchTimeSpin.width - width - 1
-                    y: 1
-                    width: searchTimeSpin.btnW - 2
-                    height: searchTimeSpin.height - 2
-                    radius: ScreenTools.scaleNum(3)
-                    color: searchTimeSpin.up.pressed ? "#BBD4FF" : "#F5F7FA"
+                Label {
+                    Layout.preferredHeight: root.controlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("(5~120秒)")
+                }
 
-                    // 补齐内侧两个直角
-                    Rectangle {
-                        anchors.left: parent.left
-                        width: parent.radius
-                        height: parent.height
-                        color: parent.color
-                    }
+                Label {
+                    Layout.preferredHeight: root.controlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("语言")
+                }
 
-                    // 与输入区的分隔线
-                    Rectangle {
-                        anchors.left: parent.left
-                        width: 1
-                        height: parent.height
-                        color: "#D8DCE3"
-                    }
+                AppComboBox {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.controlHeight
+                    model: [qsTr("简体中文"), "English"]
+                }
 
-                    Label {
-                        anchors.centerIn: parent
-                        text: "+"
-                        font.bold: true
-                        font.pointSize: ScreenTools.scaleNum(12, true)
-                        color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
-                    }
-
+                Label {
+                    Layout.preferredHeight: root.controlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("(重启生效)")
                 }
 
             }
 
-            Label {
-                Layout.preferredHeight: root.controlHeight
-                verticalAlignment: Text.AlignVCenter
-                text: qsTr("(5~120秒)")
-            }
-
-            Label {
-                Layout.preferredHeight: root.controlHeight
-                verticalAlignment: Text.AlignVCenter
-                text: qsTr("语言")
-            }
-
-            AppComboBox {
+            // ===== 底部：保存 / 取消（样式同设定IP弹窗，右对齐一行内嵌内容区）=====
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.controlHeight
-                model: [qsTr("简体中文"), "English"]
-            }
+                Layout.preferredHeight: ScreenTools.scaleNum(36)
+                // 保证这一行不会被布局压缩掉
+                Layout.minimumHeight: ScreenTools.scaleNum(36)
+                Layout.topMargin: ScreenTools.scaleNum(4)
+                spacing: ScreenTools.scaleNum(16)
 
-            Label {
-                Layout.preferredHeight: root.controlHeight
-                verticalAlignment: Text.AlignVCenter
-                text: qsTr("(重启生效)")
-            }
-
-        }
-
-        // 底部按钮：自定义文案，沿用 AppButton（文本居中、超长自动换行）
-        footer: DialogButtonBox {
-            alignment: Qt.AlignRight
-            spacing: ScreenTools.scaleNum(16)
-
-            AppButton {
-                text: qsTr("取消")
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                onClicked: root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
-            }
-
-            AppButton {
-                text: qsTr("保存")
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                highlighted: true
-                onClicked: {
-                    root.searchSeconds = searchTimeSpin.displayText
-                    root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
+                Item {
+                    Layout.fillWidth: true
                 }
+
+                AppButton {
+                    Layout.preferredHeight: root.controlHeight
+                    highlighted: true
+                    text: qsTr("保存")
+                    onClicked: {
+                        root.searchSeconds = searchTimeSpin.displayText
+                        root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
+                        // 触发 accepted → onAccepted 弹“保存成功”提示
+                        systemConfigDialog.accept()
+                    }
+                }
+
+                AppButton {
+                    Layout.preferredHeight: root.controlHeight
+                    text: qsTr("取消")
+                    onClicked: {
+                        systemConfigDialog.reject()
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
             }
 
         }
 
     }
 
-    // ===== 通用提示弹窗 =====
+    // ===== 通用弹窗（全工程唯一 AppMessageBox 实例：单按钮提示 + 两按钮确认）=====
+    // 用 confirmAction 字符串区分事件，onAccepted 按动作分发，不再
+    // 每个场景单独实例一个 AppMessageBox。当前动作：
+    //   "messageTip"    - 单按钮纯提示：点击无任何逻辑请求，仅关闭弹窗
+    //   "setIpSelectAll" - 修改IP未勾选设备：是→全选并继续执行
+    //   "reboot"         - 重启已勾选设备（真实下发协议待接入，当前记日志）
+    //   "factoryReset"   - 恢复出厂设置已勾选设备（同上）
+    //   "tab"            - 关闭直播预览页签（安全退出在播设备）
+    //   "window"         - 退出程序
     AppMessageBox {
-        id: tipBox
-    }
+        id: confirmBox
 
-    // ===== 关闭确认弹窗（关直播页签 / 关程序共用）=====
-    AppMessageBox {
-        id: closeConfirmBox
-        // 待执行动作："tab"=关直播页签、"window"=退程序（show 前赋值）
+        // 待执行动作（showTip/showConfirm 前赋值，Accepted/Rejected 后清空）；
+        // 非空表示弹窗已开，showConfirm 据此防重复弹出
         property string confirmAction: ""
-        twoButtons: true
+
+        // 单按钮纯提示：只显示“确定”，点击仅关闭弹窗不触发任何逻辑
+        function showTip(title, text) {
+            confirmBox.confirmAction = "messageTip";
+            confirmBox.twoButtons = false;
+            confirmBox.okText = qsTr("确定");
+            confirmBox.show(title, text);
+        }
+
+        // 两按钮确认：动作类型 + 标题/内容 + 可选按钮文本（缺省“取消|确定”）
+        function showConfirm(action, title, text, ok, cancel) {
+            if (confirmBox.confirmAction !== "")
+                return; // 已开着（防重复弹出）
+            confirmBox.confirmAction = action;
+            confirmBox.twoButtons = true;
+            confirmBox.okText = ok !== undefined ? ok : qsTr("确定");
+            confirmBox.cancelText = cancel !== undefined ? cancel : qsTr("取消");
+            confirmBox.show(title, text);
+        }
+
         onAccepted: {
-            var action = closeConfirmBox.confirmAction;
-            closeConfirmBox.confirmAction = "";
-            // 安全退出正在直播的设备
-            closeLivePreview();
-            if (action === "window") {
+            var action = confirmBox.confirmAction;
+            confirmBox.confirmAction = "";
+            switch (action) {
+            case "messageTip":
+                // 纯提示：无逻辑请求，仅关闭弹窗
+                break;
+            case "setIpSelectAll":
+                root.selectAll();
+                root.executeSetIpChecked();
+                break;
+            case "reboot":
+                root.logAction(qsTr("已确认重启设备: %1 台").arg(root.selectedCount));
+                break;
+            case "factoryReset":
+                root.logAction(qsTr("已确认恢复出厂设置: %1 台").arg(root.selectedCount));
+                break;
+            case "tab":
+                root.closeLivePreview();
+                break;
+            case "window":
+                root.closeLivePreview();
                 root.exitingProgram = true;
                 exitWaitTimer.restart();
+                break;
             }
         }
 
         onRejected: {
-            // 取消：撤回关闭操作，直播保持原样
-            closeConfirmBox.confirmAction = "";
+            confirmBox.confirmAction = "";
         }
     }
 
     // ===== 升级文件选择框 =====
-    // 1) 只筛 *.bin；2) 默认打开上次所在目录（ConfigureManager 持久化），没记录时用“我的文档”
+    // 1) 只筛 *.bin；2) 默认打开上次所在目录, 首次打开默认为“我的文档”
     // 3) selectMultiple 支持一次选多个文件
     AppDialogs.FileDialog {
         id: upgradeFileDialog
@@ -1442,15 +1539,12 @@ ApplicationWindow {
         anchors.centerIn: parent
         width: setIpDialog.width
         height: setIpDialog.height
-        // 抬高层级盖住 Overlay 里弹窗的全部内容（标题栏/内容/按钮）
         z: 1000
-        // 弹窗关闭后即使 showMask 残留也不显示（弹窗 onAboutToShow 里已复位）
         busy: setIpDialog.showMask && setIpDialog.visible
         text: qsTr("正在查询IP占用状态...")
     }
 
     // ===== OSD参数共享存储：“OSD修改”弹窗 与 “其它设置-OSD设置”页共用同一份已保存参数 =====
-    // 只存两个界面都有的项；saved 表示是否被保存过（未保存过时两侧各用默认值）
     QtObject {
         id: osdConfig
 
@@ -1507,8 +1601,6 @@ ApplicationWindow {
     }
 
     // ===== 退出程序等待遮罩 =====
-    // 确认退出后阻塞等待拉流线程退出期间，覆盖整个窗口并吞掉鼠标事件；
-    // 等待结束（无论成功/超时）随即 Qt.quit()，进程退出，无需复位路径
     AppBusyMask {
         anchors.fill: parent
         z: 100
