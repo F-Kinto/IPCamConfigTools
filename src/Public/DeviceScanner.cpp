@@ -130,7 +130,7 @@ void DeviceScanner::slotHandleLanDevice(const QByteArray& data, const QString& i
     // 与设备表格列一一对应
     device["ip"]             = ip;
     device["mac"]            = mac.isEmpty() ? ethMac : mac;
-    // 设备ID（DeviceUID）填在“云ID”列
+    // 设备ID（DeviceUID）填在“UID”列
     device["cloudId"]        = uid;
     device["deviceType"]     = productName;
     device["currentVersion"] = toStringField(info.firmware_ver, sizeof(info.firmware_ver));

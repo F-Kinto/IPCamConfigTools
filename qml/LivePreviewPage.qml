@@ -1,7 +1,7 @@
 /*********************************************************************
 File : LivePreviewPage.qml
 Module : 页面
-date : 2026/10/12
+date : 2026/10/14
 Ver : 1.3.0
 History:
 1.0.0 build this module
@@ -33,53 +33,97 @@ Item {
 
     // 要播放的设备列表（QVariantMap 数组，来自 DeviceManager.checkedDevices()）
     property var devices: []
+    // 内部把 deviceModel 回写到 devices 时置位：跳过 onDevicesChanged 回灌
+    property bool _syncing: false
     // 最多同时显示的直播窗口数（main.qml 里点击播放时会先拦截，这里是兜底）
     readonly property int maxDevices: 4
     // 每行列数：1 台时单格，2 台及以上每行 2 格（4 台时 2x2）
-    readonly property int columns: Math.max(1, Math.min(2, devices.length))
-    // 正在全屏显示的那一台的序号，-1 表示没有全屏
-    property int fullScreenIndex: -1
+    readonly property int columns: Math.max(1, Math.min(2, deviceModel.count))
+    // 行数：按设备数与列数推算（1/2 台 → 1 行，3/4 台 → 2 行）。
+    // 用于把视口高度均分给各行：格子高 = 行高，铺满不留白
+    readonly property int rows: Math.ceil(Math.max(1, deviceModel.count) / Math.max(1, columns))
+    // 页内放大的那一路序号（双击切换），-1 表示网格布局
+    property int zoomIndex: -1
+    // 整页是否处于全屏窗口中（右键菜单“全屏”，整个网格一起进全屏窗）
+    property bool pageFullScreen: false
     // 全屏窗口当前是否可见（对外只读，用于外部查询全屏状态）
     readonly property bool fullScreenVisible: fullScreenWin.visible
-    // 全屏窗口当前显示的设备（可能为空对象，取值一律防空）
-    readonly property var fullScreenDevice: (root.fullScreenIndex >= 0 && root.fullScreenIndex < root.devices.length) ? root.devices[root.fullScreenIndex] : ({
-    })
-    // 标题栏浮层是否显示（网格页与全屏窗共用一套显隐状态）
-    property bool headerShown: false
+    // 当前显示标题栏的那一路序号（-1 = 全部隐藏）。按格子驱动：
+    // 碰哪一路顶部就只显示哪一路的标题栏，其余路不受影响
+    property int headerIndex: -1
 
-    // 进入全屏：独占整个工作区（保留任务栏）
-    function enterFullScreen(index) {
-        root.fullScreenIndex = index;
+    // 页内放大：该路铺满直播页区域，其余路隐藏但拉流不中断
+    function enterPageZoom(index) {
+        root.zoomIndex = index;
+        root.pokeHeader(index);
     }
 
-    // 退出全屏，恢复网格
+    // 还原网格布局
+    function exitPageZoom() {
+        root.zoomIndex = -1;
+    }
+
+    // 整页进入全屏窗口：整个网格一起重父级，各路拉流不中断
+    function enterFullScreen() {
+        root.pageFullScreen = true;
+    }
+
+    // 退出整页全屏：网格归还回直播页
     function exitFullScreen() {
-        root.fullScreenIndex = -1;
+        root.pageFullScreen = false;
     }
 
     // 关闭一路直播：从播放列表移除该设备。
     // 全部关完后由 main.qml 监听 devices 变化自动收起“直播预览”页签
     function closeDevice(index) {
-        if (index < 0 || index >= root.devices.length)
+        if (index < 0 || index >= deviceModel.count)
             return ;
 
-        // 正在全屏的就是这一路：先退全屏；其它情况序号前移一位
-        if (root.fullScreenIndex === index)
-            root.exitFullScreen();
-        else if (root.fullScreenIndex > index)
-            root.fullScreenIndex--;
-        var list = root.devices.slice();
-        list.splice(index, 1);
-        root.devices = list;
+        deviceModel.remove(index);
+        // 整页全屏/页内放大状态下关闭一路：网格仍在原容器内增量更新，
+        // 仅需修正放大路序号，无需退出全屏或还原放大
+        if (root.zoomIndex > index)
+            root.zoomIndex--;
+        else if (root.zoomIndex === index)
+            root.zoomIndex = -1;
+        root.syncDevicesFromModel();
+        if (root.visible)
+            root.pokeHeader(deviceModel.count > 0 ? 0 : -1);
     }
 
-    // 显示标题栏并重置 1s 隐藏计时
-    function pokeHeader() {
-        root.headerShown = true;
+    // 单点更新某一路的设备数据（如 RTSP 凭据晚到替换设备信息）：只刷新
+    // 该行，对应 RtspVideoItem 按新数据重连，其余路不受影响
+    function updateDevice(index, device) {
+        if (index < 0 || index >= deviceModel.count)
+            return ;
+
+        deviceModel.setProperty(index, "device", device);
+        var list = root.devices.slice();
+        if (index < list.length) {
+            list[index] = device;
+            root._syncing = true;
+            root.devices = list;
+            root._syncing = false;
+        }
+    }
+
+    // 把 deviceModel 当前内容回写到 devices，置 _syncing 防止 onDevicesChanged 回灌重建
+    function syncDevicesFromModel() {
+        var list = [];
+        for (var i = 0; i < deviceModel.count; i++)
+            list.push(deviceModel.get(i).device);
+        root._syncing = true;
+        root.devices = list;
+        root._syncing = false;
+    }
+
+    // 显示某一路的标题栏并重置 1s 隐藏计时（index = -1 表示全部隐藏）
+    function pokeHeader(index) {
+        root.headerIndex = (index === undefined) ? -1 : index;
         headerHideTimer.restart();
     }
 
-    // 鼠标进入标题栏区域：停止计时（停留期间不隐藏）
+    // 鼠标停留在标题栏区域：停止计时（停留期间不隐藏）
     function holdHeader() {
         headerHideTimer.stop();
     }
@@ -91,36 +135,62 @@ Item {
 
     // 播放列表变了：退出全屏避免停留在已失效画面上，并重新展示标题栏 1s。
     onDevicesChanged: {
-        if (root.devices.length > root.maxDevices) {
-            root.devices = root.devices.slice(0, root.maxDevices);
+        if (root._syncing)
             return ;
+        var list = root.devices;
+        if (list.length > root.maxDevices) {
+            root._syncing = true;
+            root.devices = list.slice(0, root.maxDevices);
+            root._syncing = false;
+            list = root.devices;
         }
+        root.syncModelToList(list);
         root.exitFullScreen();
+        if (list.length > 1 && root.zoomIndex >= 0)
+            root.zoomIndex = -1;
         if (root.visible)
-            root.pokeHeader();
+            root.pokeHeader(list.length > 0 ? 0 : -1);
 
     }
-    // 全屏/还原的实际切换：由 fullScreenIndex 驱动。
-    onFullScreenIndexChanged: {
-        if (root.fullScreenIndex >= 0) {
-            var cell = cellRepeater.itemAt(root.fullScreenIndex);
-            if (cell && cell.videoComp && cell.videoComp.parent !== fsVideoArea) {
-                cell.videoComp.parent = fsVideoArea;
-                cell.videoComp.anchors.fill = fsVideoArea;
+
+    // 按设备 key 对齐做增量同步：中间差异段删除后按新列表逐行插入
+    function syncModelToList(list) {
+        var prefix = 0;
+        while (prefix < deviceModel.count && prefix < list.length && DeviceManager.keyOf(deviceModel.get(prefix).device) === DeviceManager.keyOf(list[prefix]))
+            prefix++;
+        var suffix = 0;
+        while (suffix < deviceModel.count - prefix && suffix < list.length - prefix && DeviceManager.keyOf(deviceModel.get(deviceModel.count - 1 - suffix).device) === DeviceManager.keyOf(list[list.length - 1 - suffix]))
+            suffix++;
+        var removeCount = deviceModel.count - prefix - suffix;
+        for (var i = 0; i < removeCount; i++)
+            deviceModel.remove(prefix);
+        var insertCount = list.length - prefix - suffix;
+        for (var j = 0; j < insertCount; j++)
+            deviceModel.insert(prefix + j, {device: list[prefix + j]});
+    }
+
+    onPageFullScreenChanged: {
+        if (root.pageFullScreen) {
+            if (flick.parent !== fsVideoArea) {
+                flick.parent = fsVideoArea;
+                flick.anchors.fill = fsVideoArea;
+                flick.anchors.margins = 0;
             }
-            fullScreenWin.showMaximized();
-            root.pokeHeader();
+            fullScreenWin.showFullScreen();
+            root.pokeHeader(0);
         } else {
             fullScreenWin.hide();
-            // 归还被借走的渲染组件（正常只可能有一路挂在全屏窗）
-            for (var i = 0; i < cellRepeater.count; i++) {
-                var c = cellRepeater.itemAt(i);
-                if (c && c.videoComp && c.videoComp.parent === fsVideoArea) {
-                    c.videoComp.parent = c;
-                    c.videoComp.anchors.fill = c;
-                }
+            if (flick.parent !== root) {
+                flick.parent = root;
+                flick.anchors.fill = root;
+                flick.anchors.margins = ScreenTools.scaleNum(4);
             }
         }
+    }
+
+    // 直播设备渲染模型
+    ListModel {
+        id: deviceModel
     }
 
     // 标题栏自动隐藏计时：1s 内鼠标没有停留在标题栏区域就隐藏
@@ -128,7 +198,7 @@ Item {
         id: headerHideTimer
 
         interval: 1000
-        onTriggered: root.headerShown = false
+        onTriggered: root.headerIndex = -1
     }
 
     // 右键菜单（网格页与全屏窗各挂一份，动作一致）
@@ -143,12 +213,12 @@ Item {
         }
 
         AppMenuItem {
-            text: root.fullScreenIndex >= 0 ? qsTr("退出全屏") : qsTr("全屏")
+            text: root.pageFullScreen ? qsTr("退出全屏") : qsTr("全屏")
             onTriggered: {
-                if (root.fullScreenIndex >= 0)
+                if (root.pageFullScreen)
                     root.exitFullScreen();
                 else
-                    root.enterFullScreen(cellMenu.targetIndex);
+                    root.enterFullScreen();
             }
         }
 
@@ -157,7 +227,7 @@ Item {
     // 没有播放设备时的空状态
     Label {
         anchors.centerIn: parent
-        visible: root.devices.length === 0
+        visible: deviceModel.count === 0
         color: "#8A9099"
         font.family: "Microsoft YaHei"
         font.pointSize: ScreenTools.scaleNum(12, true)
@@ -165,7 +235,9 @@ Item {
     }
 
     Flickable {
+        id: flick
         anchors.fill: parent
+        anchors.margins: ScreenTools.scaleNum(4)
         clip: true
         contentWidth: width
         contentHeight: Math.max(height, cellFlow.implicitHeight)
@@ -179,23 +251,20 @@ Item {
             Repeater {
                 id: cellRepeater
 
-                model: root.devices
-
-                // 单路直播窗口：整格即画面区，标题栏为顶部浮层
+                model: deviceModel
                 delegate: Rectangle {
                     id: liveCell
-
-                    width: (cellFlow.width - cellFlow.spacing * (root.columns - 1)) / root.columns
-                    height: width * 9 / 16
+                    property bool isZoomed: root.zoomIndex === index || deviceModel.count === 1
+                    property bool hoverGrow: (cellMouse.containsMouse || topHover.containsMouse) && !isZoomed
+                    visible: root.zoomIndex < 0 || root.zoomIndex === index
+                    width: isZoomed ? cellFlow.width : (cellFlow.width - cellFlow.spacing * (root.columns - 1)) / root.columns
+                    height: isZoomed ? flick.height : (flick.height - cellFlow.spacing * (root.rows - 1)) / root.rows
                     color: "#101418"
-                    border.color: "#DCDCDC"
-                    border.width: 1
-
+                    // 悬停格提到相邻格之上
+                    z: hoverGrow ? 10 : 0
                     // 供全屏切换逻辑访问本窗口的渲染组件
                     property alias videoComp: cellVideo
-
                     // 断流状态机：
-                    // everPlayed  出过流（区别"首连"与"偶断流"两种遮罩观感）
                     // dead        持续 60s 无流（宽限期耗尽），转错误态等用户重连
                     property bool everPlayed: false
                     property bool dead: false
@@ -240,13 +309,13 @@ Item {
 
                         z: 1
                         anchors.fill: parent
-                        device: modelData
+                        device: model.device
 
-                        // 画面区：VideoOutput 消费 yuvProvider 的 YUV 帧
+                        // 画面区：VideoOutput 消费 yuvProvider 的 YUV 帧。
                         VideoOutput {
                             anchors.fill: parent
                             source: cellVideo.yuvProvider
-                            fillMode: VideoOutput.Stretch
+                            fillMode: VideoOutput.PreserveAspectFit
                         }
 
                         // 无流遮罩（出流即隐藏），三态：
@@ -309,23 +378,45 @@ Item {
 
                     }
 
-                    // 双击全屏 / 右键菜单（铺满整格）。
-                    // z 低于 cellVideo：遮罩内"重新连接"按钮优先吃到点击
+                    // 双击切换页内放大 / 右键弹菜单。
                     MouseArea {
+                        id: cellMouse
+
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onDoubleClicked: root.enterFullScreen(index)
+                        onDoubleClicked: {
+                            // 仅此一路：已默认铺满预览页，双击直接进出整页全屏
+                            if (deviceModel.count === 1) {
+                                if (root.pageFullScreen)
+                                    root.exitFullScreen();
+                                else
+                                    root.enterFullScreen();
+                            } else if (root.zoomIndex === index) {
+                                root.exitPageZoom();
+                            } else {
+                                root.enterPageZoom(index);
+                            }
+                        }
                         onClicked: {
                             if (mouse.button === Qt.RightButton) {
-                                cellMenu.targetIndex = index;
-                                cellMenu.popup();
+                                // 整页全屏时格子已随 Flickable 挂进全屏窗，
+                                // 右键需弹全屏窗自己的菜单
+                                if (root.pageFullScreen) {
+                                    fsMenu.targetIndex = index;
+                                    fsMenu.popup();
+                                } else {
+                                    cellMenu.targetIndex = index;
+                                    cellMenu.popup();
+                                }
                             }
                         }
                     }
 
-                    // 顶部热区：鼠标触碰窗口顶部唤出标题栏（不拦截点击）
                     MouseArea {
+                        id: topHover
+
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -334,15 +425,23 @@ Item {
                         hoverEnabled: true
                         onContainsMouseChanged: {
                             if (containsMouse)
-                                root.pokeHeader();
+                                root.pokeHeader(index);
                         }
                     }
 
                     // 标题栏浮层（自动显隐）。z:2 压过画面层 z:1
                     LiveTitleBar {
                         z: 2
-                        dev: modelData
+                        dev: model.device
                         targetIndex: index
+                    }
+
+                    Rectangle {
+                        z: 3
+                        anchors.fill: parent
+                        color: "transparent"
+                        border.color: hoverGrow ? "#4DA3FF" : "#DCDCDC"
+                        border.width: hoverGrow ? 2 : 1
                     }
 
                 }
@@ -358,10 +457,9 @@ Item {
 
     }
 
-    // 全屏（铺满工作区、保留任务栏）的那一路
+    // 全屏
     AppWin.Window {
         id: fullScreenWin
-        // 无边框 + 最大化 = 覆盖除任务栏外的整个屏幕；
         flags: Qt.Window | Qt.FramelessWindowHint
         title: qsTr("直播预览 - 全屏")
         color: "#000000"
@@ -378,40 +476,13 @@ Item {
             }
 
             AppMenuItem {
-                text: root.fullScreenIndex >= 0 ? qsTr("退出全屏") : qsTr("全屏")
-                onTriggered: {
-                    if (root.fullScreenIndex >= 0)
-                        root.exitFullScreen();
-                    else
-                        root.enterFullScreen(fsMenu.targetIndex);
-                }
+                text: qsTr("退出全屏")
+                onTriggered: root.exitFullScreen()
             }
 
         }
 
-        // 顶部热区：鼠标触碰窗口顶部唤出标题栏（不拦截点击）
-        MouseArea {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: ScreenTools.scaleNum(26)
-            acceptedButtons: Qt.NoButton
-            hoverEnabled: true
-            onContainsMouseChanged: {
-                if (containsMouse)
-                    root.pokeHeader();
-
-            }
-        }
-
-        // 标题栏浮层（自动显隐，与网格页共用一套状态）。z:2 压过画面层 z:1
-        LiveTitleBar {
-            z: 2
-            dev: root.fullScreenDevice
-            targetIndex: root.fullScreenIndex
-        }
-
-        // 画面容器：进入全屏时网格页对应窗口的 RtspVideoItem 会被重父级到这里（拉流不中断），退出时归还
+        // 画面容器：整页全屏时整个 Flickable（网格 + 全部拉流组件）被重父级到这里
         Item {
             id: fsVideoArea
 
@@ -436,34 +507,22 @@ Item {
         }
 
         Label {
+            z: 2
             anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: ScreenTools.scaleNum(16)
             color: "#5A6672"
             font.family: "Microsoft YaHei"
             font.pointSize: ScreenTools.scaleNum(10, true)
-            text: qsTr("双击画面退出全屏，右键画面打开菜单")
+            text: deviceModel.count === 1 ? qsTr("双击画面退出全屏，右键画面打开菜单") : qsTr("双击画面放大单路，右键画面打开菜单，Esc 退出全屏")
         }
 
-        // 再次双击还原；右键弹菜单
-        Item {
-            anchors.fill: parent
-            focus: true
-            Keys.onEscapePressed: root.exitFullScreen()
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                cursorShape: Qt.PointingHandCursor
-                onDoubleClicked: root.exitFullScreen()
-                onClicked: {
-                    if (mouse.button === Qt.RightButton) {
-                        fsMenu.targetIndex = root.fullScreenIndex;
-                        fsMenu.popup();
-                    }
-                }
-            }
-
+        // Esc 退出全屏
+        Shortcut {
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            enabled: fullScreenWin.visible
+            onActivated: root.exitFullScreen()
         }
 
     }
@@ -482,7 +541,7 @@ Item {
         anchors.right: parent ? parent.right : undefined
         height: ScreenTools.scaleNum(36)
         color: "#232B33"
-        visible: root.headerShown
+        visible: root.headerIndex === titleBar.targetIndex
         z: 10
 
         // 鼠标停在标题栏内不隐藏，离开后重新计时

@@ -13,12 +13,11 @@ ApplicationWindow {
     id: root
 
     // 表格列标题（共 8 列，默认可视区域只显示前 6 列，其余需拖动底部水平滚动条）
-    // 顺序与下方 TableModelColumn 一一对应；设备ID（UID）填在“云ID”列
-    property var tableTitles: [qsTr("IP地址"), qsTr("云ID"), qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("设备类型")]
+    // 顺序与下方 TableModelColumn 一一对应；设备ID（UID）填在“UID”列
+    property var tableTitles: [qsTr("IP地址"), qsTr("UID"), qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("设备类型")]
     // 是否允许鼠标拖拽表头分割线调整列宽
     property bool tableResizable: true
-    // 列宽模式：false = 固定列宽（前 6 列合计约等于默认可视宽度，第 7~8 列需横向滚动查看）
-    //           true  = 按 tableStretchFactors 权重拉伸，8 列全部压缩进可视区
+    // 列宽模式
     property bool tableStretchToFill: false
     // 固定列宽（tableStretchToFill 为 false 时生效）
     property var tableFixedWidths: [ScreenTools.scaleNum(150), ScreenTools.scaleNum(190), ScreenTools.scaleNum(130), ScreenTools.scaleNum(193), ScreenTools.scaleNum(193), ScreenTools.scaleNum(130), ScreenTools.scaleNum(150), ScreenTools.scaleNum(120)]
@@ -43,6 +42,8 @@ ApplicationWindow {
     property bool previewOpen: false
     // 当前显示的页：0=设备列表，1=直播预览
     property int currentPage: 0
+    // 设备列表页：操作面板与升级模块折叠开关（true=已收起，设备列表占满整行）
+    property bool sidePanelsHidden: false
     // 固件升级：已选择的升级文件（本地路径列表，*.bin，可多选）
     property var upgradeFiles: []
     // 上次打开“升级文件”选择框时所在的目录（由 ConfigureManager 持久化到 ini）
@@ -296,7 +297,6 @@ ApplicationWindow {
             // 动作在弹窗属性上捕获（原因见 requestCloseLivePreview 注释）
             closeConfirmBox.confirmAction = "window";
             closeConfirmBox.show(qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭直播并退出程序吗?").arg(count));
-            root.logAction(qsTr("关闭程序确认弹窗: %1 台在播").arg(count));
         } else {
             // 无直播放行，但可能有刚关闭还在线程收尾的任务：
             // 快速等一下（通常 0ms）再放行，防拆进程撞上退出中线程
@@ -306,7 +306,6 @@ ApplicationWindow {
 
     // ===== 操作日志 =====
     // 从调用栈里取“调用 logAction 的那一层”的位置（第 0 帧是 logAction 自身）
-    // 返回 {file, line, function}，解析失败时返回空串/0
     function callerLocation() {
         var stack = "";
         try {
@@ -367,7 +366,6 @@ ApplicationWindow {
     }
 
     // ===== 设备搜索 =====
-    // 触发一次广播搜索：网段 = 主界面所选网卡对应的网段（选“所有网卡”则不限制）
     function searchDevices() {
         if (root.searching)
             return ;
@@ -390,7 +388,6 @@ ApplicationWindow {
     }
 
     // ===== 固件升级 =====
-    // file:/// 开头的 url 转本地路径（如 "file:///C:/a/b.bin" -> "C:/a/b.bin"）
     function urlToLocalPath(url) {
         var s = String(url);
         if (s.indexOf("file:///") === 0)
@@ -399,13 +396,11 @@ ApplicationWindow {
         return decodeURIComponent(s);
     }
 
-    // 取本地路径里的文件名（如 "C:/a/b.bin" -> "b.bin"）
     function pathFileName(path) {
         var i = Math.max(String(path).lastIndexOf("/"), String(path).lastIndexOf("\\"));
         return i >= 0 ? String(path).substring(i + 1) : String(path);
     }
 
-    // 取本地路径里的目录（如 "C:/a/b.bin" -> "C:/a"）
     function pathDirName(path) {
         var s = String(path);
         var i = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
@@ -459,8 +454,6 @@ ApplicationWindow {
     // 下发修改 IP 请求：勾选设备（uid 升序，与 ips 下标一一配对）
     // TODO: 接入真实下发协议（当前先记日志记录配对结果，设备响应后由后续版本处理）
     function sendSetIpRequests(ips) {
-        // DeviceManager 已随勾选变化实时同步（onSelectedRowsChanged），
-        // checkedDevices() 按 uid 升序返回，与 C++ keyOf 的 uid 取值一致
         var devices = DeviceManager.checkedDevices();
         for (var i = 0; i < devices.length; i++) {
             var id = devices[i]["uid"] || devices[i]["cloudId"] || devices[i]["mac"] || devices[i]["ip"] || "";
@@ -473,7 +466,6 @@ ApplicationWindow {
     function executeSetIp() {
         if (!root.ensureDeviceSelected())
             return ;
-        // IP 来源：设定IP弹窗“确定”时已探测空闲并保存的参数
         if (setIpDialog.savedParams === null) {
             tipBox.show(qsTr("温馨提示"), qsTr("请先在[设定IP]中设定IP地址"));
             return ;
@@ -511,12 +503,10 @@ ApplicationWindow {
         Qt.callLater(root.searchDevices);
     }
 
-    // 接收设备搜索结果：每发现一台追加一行，搜索结束复位按钮状态
+    // 接收设备搜索结果
     Connections {
-        // 用显式函数写法（Qt 5.15 对隐式 onFoo 写法会告警）
         function onDeviceFound(device) {
-            // 设备一发现就异步预取 RTSP 凭据（存进 DeviceManager 缓存），
-            // 双击/勾选播放时通过 mergeRtspCredential 直接读缓存
+            // 设备一发现就异步预取 RTSP 凭据（存进 DeviceManager 缓存）
             DeviceManager.fetchRtspCredential(device);
             deviceModel.appendRow(device);
         }
@@ -560,14 +550,12 @@ ApplicationWindow {
 
             var key = DeviceManager.keyOf(device);
             var devices = livePreviewPage.devices;
-            var updated = [];
             for (var i = 0; i < devices.length; i++) {
-                if (DeviceManager.keyOf(devices[i]) === key)
-                    updated.push(device);
-                else
-                    updated.push(devices[i]);
+                if (DeviceManager.keyOf(devices[i]) === key) {
+                    livePreviewPage.updateDevice(i, device);
+                    break;
+                }
             }
-            livePreviewPage.devices = updated;
         }
 
         target: DeviceManager
@@ -578,7 +566,6 @@ ApplicationWindow {
         function onCurrentRowChanged() {
             root.syncCurrentDevice();
         }
-
         target: deviceTable
     }
 
@@ -587,7 +574,6 @@ ApplicationWindow {
         function onDevicesChanged() {
             if (root.previewOpen && livePreviewPage.devices.length === 0)
                 root.closeLivePreview();
-
         }
 
         target: livePreviewPage
@@ -689,11 +675,9 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: ScreenTools.scaleNum(6)
 
-                // 设备信息表格（3/4）：外层 2px 深灰边框，表格显示在框内
-                // 内部为“页签栏 + 页面”：设备列表页固定，直播预览页按需打开；
-                // 只有设备列表页时页签栏整体隐藏，表格填满整个框
+                // 设备信息表格
                 Rectangle {
-                    width: (midRow.width - midRow.spacing) * 3 / 4
+                    width: !collapseBtn.visible ? midRow.width : cmdPanel.visible ? (midRow.width - midRow.spacing * 2 - collapseBtn.width) * 3 / 4 : midRow.width - midRow.spacing - collapseBtn.width
                     height: midRow.height
                     color: "white"
                     border.width: 1
@@ -704,7 +688,6 @@ ApplicationWindow {
                         anchors.fill: parent
 
                         // ===== 页签栏 =====
-                        // 页签不滚动、不压缩，两个固定页签宽度必然放得下
                         Row {
                             id: tabBar
 
@@ -713,8 +696,7 @@ ApplicationWindow {
                             topPadding: ScreenTools.scaleNum(4)
                             spacing: ScreenTools.scaleNum(6)
 
-                            // “设备列表”页签：固定页签，不可关闭。
-                            // 固定宽度、无图标、文本左对齐
+                            // “设备列表”页签：不可关闭。
                             Rectangle {
                                 width: ScreenTools.scaleNum(160)
                                 height: ScreenTools.scaleNum(30)
@@ -742,8 +724,7 @@ ApplicationWindow {
 
                             }
 
-                            // “直播预览”页签：打开“播放勾选设备”后出现，右侧带关闭按钮。
-                            // 固定宽度、无图标，文本左对齐，关闭按钮贴右侧
+                            // “直播预览”页签：打开“播放勾选设备”后出现
                             Rectangle {
                                 width: ScreenTools.scaleNum(160)
                                 height: ScreenTools.scaleNum(30)
@@ -765,7 +746,6 @@ ApplicationWindow {
                                     color: root.currentPage === 1 ? "#1F6FEB" : "#4A4F55"
                                     text: qsTr("直播预览")
                                 }
-                                // 关闭按钮：贴右侧，悬浮变红
 
                                 Item {
                                     id: closeGlyph
@@ -834,16 +814,14 @@ ApplicationWindow {
                                 headerHeight: Math.round(root.controlHeight * 1.5)
                                 rowHeight: root.controlHeight
                                 labelFont: root.appFont
-                                // IP 列（第 0 列）显示“复选框 + IP”，勾选状态与“已选数量”联动
                                 checkBoxColumn: 0
                                 checkedRows: root.selectedRows
                                 onRowChecked: root.setRowChecked(row, checked)
-                                // 双击某行：直接播放该行设备（切到“直播预览”页签）
+                                // 双击
                                 onRowDoubleClicked: root.openLivePreviewOfRow(row)
                                 // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
                                 columnRoles: ["ip", "cloudId", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
                                 // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
-                                // 并按新的行号重新保存“当前选中设备”（数据此时已是最新的）
                                 onRowsReordered: {
                                     root.remapSelectedRows(indexMap);
                                     root.syncCurrentDevice();
@@ -905,11 +883,45 @@ ApplicationWindow {
 
                 }
 
+                // 折叠/展开按钮
+                Rectangle {
+                    id: collapseBtn
+
+                    visible: root.currentPage === 0
+                    width: ScreenTools.scaleNum(12)
+                    height: midRow.height
+                    radius: ScreenTools.scaleNum(6)
+                    color: collapseArea.containsMouse ? "#EAF3FF" : "#F5F6F7"
+                    border.width: 1
+                    border.color: collapseArea.containsMouse ? "#4DA3FF" : "#DCDCDC"
+
+                    // 箭头指示面板去向：展开态向右收起（▶），折叠态向左展开（◀）
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.sidePanelsHidden ? "\u25C0" : "\u25B6"
+                        color: collapseArea.containsMouse ? "#1F6FEB" : "#8A9099"
+                        font.family: "Microsoft YaHei"
+                        font.pointSize: ScreenTools.scaleNum(10, true)
+                    }
+
+                    MouseArea {
+                        id: collapseArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.sidePanelsHidden = !root.sidePanelsHidden
+                    }
+
+                }
+
                 // 操作指令面板（1/4）
                 ColumnLayout {
-                    width: (midRow.width - midRow.spacing) / 4
+                    id: cmdPanel
+                    width: (midRow.width - midRow.spacing * 2 - collapseBtn.width) / 4
                     height: midRow.height
                     spacing: ScreenTools.scaleNum(8)
+                    visible: root.currentPage === 0 && !root.sidePanelsHidden
 
                     Label {
                         Layout.preferredHeight: root.controlHeight
@@ -1071,6 +1083,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: ScreenTools.scaleNum(120)
             title: qsTr("固件升级")
+            visible: root.currentPage === 0 && !root.sidePanelsHidden
 
             GridLayout {
                 columns: 4

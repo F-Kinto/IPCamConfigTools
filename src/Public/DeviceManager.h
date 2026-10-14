@@ -28,7 +28,7 @@ struct DeviceInfo {
     QString uid;            /**< 设备唯一标识（DeviceUID）；为空时由 mac / ip 兜底做 key */
     QString ip;             /**< IP 地址 */
     QString mac;            /**< 物理地址 */
-    QString cloudId;        /**< 云ID（表格里显示的就是 DeviceUID） */
+    QString cloudId;        /**< UID（表格里显示的就是 DeviceUID） */
     QString deviceType;     /**< 设备类型（产品名） */
     QString currentVersion; /**< 升级当前版本号 */
     QString targetVersion;  /**< 升级后版本号 */
@@ -85,7 +85,7 @@ struct DeviceInfo {
         info.systemModel    = map.value("systemModel").toString();
         info.rtspUserName   = map.value("rtspUserName").toString();
         info.rtspPassword   = map.value("rtspPassword").toString();
-        // 表格里的“云ID”列就是 uid，个别设备 uid 为空时用它兜底
+        // 表格里的“UID”列就是 uid，个别设备 uid 为空时用它兜底
         if (info.uid.isEmpty())
             info.uid = info.cloudId;
 
