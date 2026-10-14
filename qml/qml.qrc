@@ -16,6 +16,7 @@
         <file>Controls/AppTimePicker.qml</file>
         <file>Controls/AppCloseButton.qml</file>
         <file>Controls/AppDialogHeader.qml</file>
+        <file>Controls/AppContentDialog.qml</file>
         <file>Controls/AppPanel.qml</file>
         <file>Controls/AppContextMenu.qml</file>
         <file>Controls/AppMenuItem.qml</file>

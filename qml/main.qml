@@ -1207,230 +1207,170 @@ ApplicationWindow {
 
     }
 
-    // ===== 系统配置弹窗=====
-    Dialog {
+    // ===== 系统配置弹窗（外壳复用 AppContentDialog，中间表单内容在此声明）=====
+    AppContentDialog {
         id: systemConfigDialog
 
         title: qsTr("系统配置")
-        modal: true
-        dim: true
         width: ScreenTools.scaleNum(420)
-        anchors.centerIn: Overlay.overlay
-        clip: true
-        closePolicy: Popup.CloseOnEscape
-        padding: ScreenTools.scaleNum(16)
-        contentHeight: contentLayout.implicitHeight
+        okText: qsTr("保存")
+        // 保存：更新搜索时间并弹“保存成功”提示（accept 触发 onAccepted）
+        onOkClicked: {
+            root.searchSeconds = searchTimeSpin.displayText
+            root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(systemConfigDialog.okText))
+            systemConfigDialog.accept()
+        }
+        // 取消：直接关闭
+        onCancelClicked: {
+            systemConfigDialog.reject()
+        }
         // 点击“保存”后弹出提示
         onAccepted: confirmBox.showTip(qsTr("温馨提示"), qsTr("保存成功"))
 
-        background: Rectangle {
-            radius: ScreenTools.scaleNum(4)
-            color: "#FFFFFF"
-            border.width: 1
-            border.color: "#DCDCDC"
-        }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 3
+            columnSpacing: ScreenTools.scaleNum(10)
+            rowSpacing: ScreenTools.scaleNum(10)
 
-        // 屏蔽 Dialog 默认标题栏，改用统一封装的标题栏（含关闭按钮）
-        header: AppDialogHeader {
-            title: systemConfigDialog.title
-            onClosed: systemConfigDialog.reject()
-        }
+            Label {
+                Layout.preferredHeight: root.controlHeight
+                verticalAlignment: Text.AlignVCenter
+                text: qsTr("搜索时间(秒)")
+            }
 
-        footer: Item {
-            height: 0
-        }
-
-        contentItem: ColumnLayout {
-            id: contentLayout
-
-            width: systemConfigDialog.availableWidth
-            spacing: ScreenTools.scaleNum(12)
-
-            GridLayout {
+            SpinBox {
+                id: searchTimeSpin
+                // “− / +”按钮为正方形，边长与控件高度一致
+                readonly property int btnW: root.controlHeight
                 Layout.fillWidth: true
-                columns: 3
-                columnSpacing: ScreenTools.scaleNum(10)
-                rowSpacing: ScreenTools.scaleNum(10)
+                Layout.preferredHeight: root.controlHeight
+                from: 5
+                to: 120
+                value: 5
+                stepSize: 1
+                editable: true
+                hoverEnabled: true
+                padding: 0
+                leftPadding: btnW
+                rightPadding: btnW
+                font.family: "Microsoft YaHei"
+                font.pointSize: ScreenTools.scaleNum(10, true)
 
-                Label {
-                    Layout.preferredHeight: root.controlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("搜索时间(秒)")
+                background: Rectangle {
+                    radius: ScreenTools.scaleNum(4)
+                    color: searchTimeSpin.enabled ? "white" : "#f0f0f0"
+                    border.width: 1
+                    border.color: (searchTimeSpin.activeFocus || searchTimeSpin.hovered) ? "#2f6fed" : "#DCDCDC"
                 }
 
-                SpinBox {
-                    id: searchTimeSpin
-                    // “− / +”按钮为正方形，边长与控件高度一致
-                    readonly property int btnW: root.controlHeight
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.controlHeight
-                    from: 5
-                    to: 120
-                    value: 5
-                    stepSize: 1
-                    editable: true
-                    hoverEnabled: true
-                    padding: 0
-                    leftPadding: btnW
-                    rightPadding: btnW
-                    font.family: "Microsoft YaHei"
-                    font.pointSize: ScreenTools.scaleNum(10, true)
+                // 数字区：在两个按钮之间居中显示
+                contentItem: TextInput {
+                    z: 2
+                    text: searchTimeSpin.displayText
+                    font: searchTimeSpin.font
+                    color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
+                    horizontalAlignment: Qt.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    readOnly: !searchTimeSpin.editable
+                    validator: searchTimeSpin.validator
+                    selectByMouse: true
+                }
 
-                    background: Rectangle {
-                        radius: ScreenTools.scaleNum(4)
-                        color: searchTimeSpin.enabled ? "white" : "#f0f0f0"
-                        border.width: 1
-                        border.color: (searchTimeSpin.activeFocus || searchTimeSpin.hovered) ? "#2f6fed" : "#DCDCDC"
+                // “−”按钮（左）：数值减 1 秒。
+                down.indicator: Rectangle {
+                    x: 1
+                    y: 1
+                    width: searchTimeSpin.btnW - 2
+                    height: searchTimeSpin.height - 2
+                    radius: ScreenTools.scaleNum(3)
+                    color: searchTimeSpin.down.pressed ? "#BBD4FF" : "#F5F7FA"
+
+                    // 补齐内侧两个直角
+                    Rectangle {
+                        anchors.right: parent.right
+                        width: parent.radius
+                        height: parent.height
+                        color: parent.color
                     }
 
-                    // 数字区：在两个按钮之间居中显示
-                    contentItem: TextInput {
-                        z: 2
-                        text: searchTimeSpin.displayText
-                        font: searchTimeSpin.font
+                    // 与输入区的分隔线
+                    Rectangle {
+                        anchors.right: parent.right
+                        width: 1
+                        height: parent.height
+                        color: "#D8DCE3"
+                    }
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: "-"
+                        font.bold: true
+                        font.pointSize: ScreenTools.scaleNum(12, true)
                         color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
-                        horizontalAlignment: Qt.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        readOnly: !searchTimeSpin.editable
-                        validator: searchTimeSpin.validator
-                        selectByMouse: true
-                    }
-
-                    // “−”按钮（左）：数值减 1 秒。
-                    down.indicator: Rectangle {
-                        x: 1
-                        y: 1
-                        width: searchTimeSpin.btnW - 2
-                        height: searchTimeSpin.height - 2
-                        radius: ScreenTools.scaleNum(3)
-                        color: searchTimeSpin.down.pressed ? "#BBD4FF" : "#F5F7FA"
-
-                        // 补齐内侧两个直角
-                        Rectangle {
-                            anchors.right: parent.right
-                            width: parent.radius
-                            height: parent.height
-                            color: parent.color
-                        }
-
-                        // 与输入区的分隔线
-                        Rectangle {
-                            anchors.right: parent.right
-                            width: 1
-                            height: parent.height
-                            color: "#D8DCE3"
-                        }
-
-                        Label {
-                            anchors.centerIn: parent
-                            text: "-"
-                            font.bold: true
-                            font.pointSize: ScreenTools.scaleNum(12, true)
-                            color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
-                        }
-
-                    }
-
-                    // “+”按钮（右）：数值加 1 秒
-                    up.indicator: Rectangle {
-                        x: searchTimeSpin.width - width - 1
-                        y: 1
-                        width: searchTimeSpin.btnW - 2
-                        height: searchTimeSpin.height - 2
-                        radius: ScreenTools.scaleNum(3)
-                        color: searchTimeSpin.up.pressed ? "#BBD4FF" : "#F5F7FA"
-
-                        // 补齐内侧两个直角
-                        Rectangle {
-                            anchors.left: parent.left
-                            width: parent.radius
-                            height: parent.height
-                            color: parent.color
-                        }
-
-                        // 与输入区的分隔线
-                        Rectangle {
-                            anchors.left: parent.left
-                            width: 1
-                            height: parent.height
-                            color: "#D8DCE3"
-                        }
-
-                        Label {
-                            anchors.centerIn: parent
-                            text: "+"
-                            font.bold: true
-                            font.pointSize: ScreenTools.scaleNum(12, true)
-                            color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
-                        }
-
                     }
 
                 }
 
-                Label {
-                    Layout.preferredHeight: root.controlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("(5~120秒)")
-                }
+                // “+”按钮（右）：数值加 1 秒
+                up.indicator: Rectangle {
+                    x: searchTimeSpin.width - width - 1
+                    y: 1
+                    width: searchTimeSpin.btnW - 2
+                    height: searchTimeSpin.height - 2
+                    radius: ScreenTools.scaleNum(3)
+                    color: searchTimeSpin.up.pressed ? "#BBD4FF" : "#F5F7FA"
 
-                Label {
-                    Layout.preferredHeight: root.controlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("语言")
-                }
+                    // 补齐内侧两个直角
+                    Rectangle {
+                        anchors.left: parent.left
+                        width: parent.radius
+                        height: parent.height
+                        color: parent.color
+                    }
 
-                AppComboBox {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.controlHeight
-                    model: [qsTr("简体中文"), "English"]
-                }
+                    // 与输入区的分隔线
+                    Rectangle {
+                        anchors.left: parent.left
+                        width: 1
+                        height: parent.height
+                        color: "#D8DCE3"
+                    }
 
-                Label {
-                    Layout.preferredHeight: root.controlHeight
-                    verticalAlignment: Text.AlignVCenter
-                    text: qsTr("(重启生效)")
+                    Label {
+                        anchors.centerIn: parent
+                        text: "+"
+                        font.bold: true
+                        font.pointSize: ScreenTools.scaleNum(12, true)
+                        color: searchTimeSpin.enabled ? "#1A1A1A" : "#a0a0a0"
+                    }
+
                 }
 
             }
 
-            // ===== 底部：保存 / 取消（样式同设定IP弹窗，右对齐一行内嵌内容区）=====
-            RowLayout {
+            Label {
+                Layout.preferredHeight: root.controlHeight
+                verticalAlignment: Text.AlignVCenter
+                text: qsTr("(5~120秒)")
+            }
+
+            Label {
+                Layout.preferredHeight: root.controlHeight
+                verticalAlignment: Text.AlignVCenter
+                text: qsTr("语言")
+            }
+
+            AppComboBox {
                 Layout.fillWidth: true
-                Layout.preferredHeight: ScreenTools.scaleNum(36)
-                // 保证这一行不会被布局压缩掉
-                Layout.minimumHeight: ScreenTools.scaleNum(36)
-                Layout.topMargin: ScreenTools.scaleNum(4)
-                spacing: ScreenTools.scaleNum(16)
+                Layout.preferredHeight: root.controlHeight
+                model: [qsTr("简体中文"), "English"]
+            }
 
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                AppButton {
-                    Layout.preferredHeight: root.controlHeight
-                    highlighted: true
-                    text: qsTr("保存")
-                    onClicked: {
-                        root.searchSeconds = searchTimeSpin.displayText
-                        root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(text))
-                        // 触发 accepted → onAccepted 弹“保存成功”提示
-                        systemConfigDialog.accept()
-                    }
-                }
-
-                AppButton {
-                    Layout.preferredHeight: root.controlHeight
-                    text: qsTr("取消")
-                    onClicked: {
-                        systemConfigDialog.reject()
-                    }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
+            Label {
+                Layout.preferredHeight: root.controlHeight
+                verticalAlignment: Text.AlignVCenter
+                text: qsTr("(重启生效)")
             }
 
         }
@@ -1468,7 +1408,7 @@ ApplicationWindow {
             confirmBox.confirmAction = action;
             confirmBox.twoButtons = true;
             confirmBox.okText = ok !== undefined ? ok : qsTr("确定");
-            confirmBox.cancelText = cancel !== undefined ? cancel : qsTr("取消");
+            confirmBox.cancelButtonText = cancel !== undefined ? cancel : qsTr("取消");
             confirmBox.show(title, text);
         }
 

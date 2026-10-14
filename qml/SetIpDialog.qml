@@ -5,9 +5,8 @@ import IPCam.Public 1.0
 // 项目内封装的通用控件目录
 import "Controls"
 
-// 设定IP弹窗：网卡下拉框 + IP/子网掩码/网关（4 段式输入）+ 确定/取消
-// 选中网卡后自动带出该网卡的 IP / 子网掩码 / 网关，可手动修改后确定
-Dialog {
+// 设定IP弹窗
+AppContentDialog {
     id: root
 
     // 统一控件高度
@@ -54,13 +53,8 @@ Dialog {
     }
 
     width: ScreenTools.scaleNum(460)
-    height: ScreenTools.scaleNum(320)
-    modal: true
-    dim: true
-    closePolicy: Popup.CloseOnEscape
-    clip: true
-    anchors.centerIn: Overlay.overlay
     title: qsTr("设置IP")
+    okText: qsTr("确定")
     // 每次打开时刷新网卡列表；上次成功应用过且网卡还在时恢复上次填写的值
     // （IP 被占用/取消则不保存新值，恢复的是更早成功的值），否则带出网卡地址
     onAboutToShow: {
@@ -86,210 +80,153 @@ Dialog {
         root.pendingIp = "";
         root.showMask = false;
     }
-    padding: ScreenTools.scaleNum(16)
-    // 高度由内容区的隐式高度决定，避免底部按钮被压缩/截断
-    contentHeight: contentLayout.implicitHeight
 
-    background: Rectangle {
-        radius: ScreenTools.scaleNum(4)
-        color: "#FFFFFF"
-        border.width: 1
-        border.color: "#DCDCDC"
+    // 确定按钮：先开遮罩再异步探测
+    onOkClicked: {
+        root.pendingIp = ipInput.text();
+        root.showMask = true;
+        ScreenTools.checkIpOccupiedAsync(root.pendingIp);
     }
 
-    // 屏蔽 Dialog 默认标题栏，改用统一封装的标题栏（含关闭按钮）
-    header: AppDialogHeader {
-        title: root.title
-        onClosed: root.reject()
+    // 取消按钮：直接关闭
+    onCancelClicked: root.reject()
 
-        // IP 占用提示弹窗：放在标题栏容器内，避免进入内容区的布局被 ColumnLayout 排版
-        AppMessageBox {
-            id: tipBox
-        }
-
+    // IP 占用提示弹窗
+    AppMessageBox {
+        id: tipBox
     }
-
-    footer: Item {
-        height: 0
-    }
-    // 四周外边距统一 16
 
     // 4 段式 IP 输入框（如 192.168.5.205），交互细节见 AppIpInput.qml
     component IpInput: AppIpInput {
         ctrlHeight: root.ctrlH
     }
 
-    contentItem: ColumnLayout {
-        id: contentLayout
+    // ===== 顶部：修改IP起始地址 / 批量修改设定IP =====
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: ScreenTools.scaleNum(24)
 
-        width: root.availableWidth
-        spacing: ScreenTools.scaleNum(12)
+        AppCheckBox {
+            id: startAddrCheck
 
-            // ===== 顶部：修改IP起始地址 / 批量修改设定IP =====
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: ScreenTools.scaleNum(24)
-
-                AppCheckBox {
-                    id: startAddrCheck
-
-                    text: qsTr("修改IP起始地址")
-                    checked: false
-                    // 与“批量修改设定IP”互斥：勾选本项时取消另一项（两者可同时不勾选）
-                    onCheckedChanged: {
-                        if (checked) {
-                            batchCheck.checked = false;
-                            console.log(qsTr("设定IP-勾选修改IP起始地址, 已取消批量修改设定IP"));
-                        }
-                    }
+            text: qsTr("修改IP起始地址")
+            checked: false
+            // 与“批量修改设定IP”互斥：勾选本项时取消另一项（两者可同时不勾选）
+            onCheckedChanged: {
+                if (checked) {
+                    batchCheck.checked = false;
+                    console.log(qsTr("设定IP-勾选修改IP起始地址, 已取消批量修改设定IP"));
                 }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                AppCheckBox {
-                    id: batchCheck
-
-                    text: qsTr("批量修改设定IP")
-                    checked: false
-                    visible: false
-                    // 与“修改IP起始地址”互斥：勾选本项时取消另一项（两者可同时不勾选）
-                    onCheckedChanged: {
-                        if (checked) {
-                            startAddrCheck.checked = false;
-                            console.log(qsTr("设定IP-勾选批量修改设定IP, 已取消修改IP起始地址"));
-                        }
-                    }
-                }
-
             }
+        }
 
-            // ===== 网卡 =====
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: ScreenTools.scaleNum(8)
+        Item {
+            Layout.fillWidth: true
+        }
 
-                Label {
-                    Layout.preferredWidth: root.labelWidth
-                    Layout.preferredHeight: root.ctrlH
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignLeft
-                    text: qsTr("网卡")
+        AppCheckBox {
+            id: batchCheck
+
+            text: qsTr("批量修改设定IP")
+            checked: false
+            visible: false
+            // 与“修改IP起始地址”互斥：勾选本项时取消另一项（两者可同时不勾选）
+            onCheckedChanged: {
+                if (checked) {
+                    startAddrCheck.checked = false;
+                    console.log(qsTr("设定IP-勾选批量修改设定IP, 已取消修改IP起始地址"));
                 }
-
-                AppComboBox {
-                    id: nicCombo
-
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.ctrlH
-                    textRole: "displayName"
-                    model: root.nicList
-                    displayText: currentIndex >= 0 ? currentText : qsTr("未检测到网卡")
-                    onCurrentIndexChanged: root.applyNic()
-                }
-
             }
+        }
 
-            // ===== IP =====
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: ScreenTools.scaleNum(8)
+    }
 
-                Label {
-                    Layout.preferredWidth: root.labelWidth
-                    Layout.preferredHeight: root.ctrlH
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignLeft
-                    text: qsTr("IP")
-                }
+    // ===== 网卡 =====
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: ScreenTools.scaleNum(8)
 
-                IpInput {
-                    id: ipInput
+        Label {
+            Layout.preferredWidth: root.labelWidth
+            Layout.preferredHeight: root.ctrlH
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
+            text: qsTr("网卡")
+        }
 
-                    Layout.fillWidth: true
-                }
+        AppComboBox {
+            id: nicCombo
 
-            }
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.ctrlH
+            textRole: "displayName"
+            model: root.nicList
+            displayText: currentIndex >= 0 ? currentText : qsTr("未检测到网卡")
+            onCurrentIndexChanged: root.applyNic()
+        }
 
-            // ===== 子网掩码 =====
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: ScreenTools.scaleNum(8)
+    }
 
-                Label {
-                    Layout.preferredWidth: root.labelWidth
-                    Layout.preferredHeight: root.ctrlH
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignLeft
-                    text: qsTr("子网掩码")
-                }
+    // ===== IP =====
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: ScreenTools.scaleNum(8)
 
-                IpInput {
-                    id: maskInput
+        Label {
+            Layout.preferredWidth: root.labelWidth
+            Layout.preferredHeight: root.ctrlH
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
+            text: qsTr("IP")
+        }
 
-                    Layout.fillWidth: true
-                }
+        IpInput {
+            id: ipInput
 
-            }
+            Layout.fillWidth: true
+        }
 
-            // ===== 网关 =====
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: ScreenTools.scaleNum(8)
+    }
 
-                Label {
-                    Layout.preferredWidth: root.labelWidth
-                    Layout.preferredHeight: root.ctrlH
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignLeft
-                    text: qsTr("网关")
-                }
+    // ===== 子网掩码 =====
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: ScreenTools.scaleNum(8)
 
-                IpInput {
-                    id: gwInput
+        Label {
+            Layout.preferredWidth: root.labelWidth
+            Layout.preferredHeight: root.ctrlH
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
+            text: qsTr("子网掩码")
+        }
 
-                    Layout.fillWidth: true
-                }
+        IpInput {
+            id: maskInput
 
-            }
+            Layout.fillWidth: true
+        }
 
-            // ===== 底部：确定 / 取消 =====
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: ScreenTools.scaleNum(36)
-                // 保证这一行不会被布局压缩掉
-                Layout.minimumHeight: ScreenTools.scaleNum(36)
-                Layout.topMargin: ScreenTools.scaleNum(4)
-                spacing: ScreenTools.scaleNum(16)
+    }
 
-                Item {
-                    Layout.fillWidth: true
-                }
+    // ===== 网关 =====
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: ScreenTools.scaleNum(8)
 
-                AppButton {
-                    Layout.preferredHeight: root.ctrlH
-                    highlighted: true
-                    text: qsTr("确定")
-                    onClicked: {
-                        // 先开遮罩再异步探测：SendARP 是同步阻塞调用（无人应答时等较久）
-                        root.pendingIp = ipInput.text();
-                        root.showMask = true;
-                        ScreenTools.checkIpOccupiedAsync(root.pendingIp);
-                    }
-                }
+        Label {
+            Layout.preferredWidth: root.labelWidth
+            Layout.preferredHeight: root.ctrlH
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
+            text: qsTr("网关")
+        }
 
-                AppButton {
-                    Layout.preferredHeight: root.ctrlH
-                    text: qsTr("取消")
-                    onClicked: root.reject()
-                }
+        IpInput {
+            id: gwInput
 
-                Item {
-                    Layout.fillWidth: true
-                }
-
-            }
+            Layout.fillWidth: true
+        }
 
     }
 
@@ -329,5 +266,3 @@ Dialog {
     }
 
 }
-
-
