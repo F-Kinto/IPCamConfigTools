@@ -93,7 +93,7 @@ ApplicationWindow {
         }
         root.logAction("********** 网卡信息结束，共 " + root.nicList.length + " 张 **********");
         var cur = root.currentNic();
-        root.logAction("当前使用的网卡: " + (cur ? cur["displayName"] : "所有网卡")));
+        root.logAction("当前使用的网卡: " + (cur ? cur["displayName"] : "所有网卡"));
     }
 
     // 按配置文件中保存的网卡名匹配；匹配不到（含“All netCard”）则选中第一项“所有网卡”
@@ -654,7 +654,7 @@ ApplicationWindow {
                 onActivated: {
                     root.saveNicSelection();
                     var nic = root.currentNic();
-                    root.logAction("网卡切换为'%1'".arg(nic ? nic["displayName"] : "所有网卡")));
+                    root.logAction("网卡切换为'%1'".arg(nic ? nic["displayName"] : "所有网卡"));
                 }
             }
 
