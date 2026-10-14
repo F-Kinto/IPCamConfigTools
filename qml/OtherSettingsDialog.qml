@@ -536,18 +536,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        // 先关闭，再打印日志：避免日志/取值出错时把弹窗卡住关不掉
-                        console.log(qsTr("其它设置-网络设置保存: ") + JSON.stringify({
-                            "setEthernet": ethCheck.checked,
-                            "ip": ipAddrInput.text(),
-                            "netmask": maskInput.text(),
-                            "gateway": gwInput.text(),
-                            "dns1": dns1Input.text(),
-                            "dns2": dns2Input.text(),
-                            "netUnion": netUnionCombo.currentText,
-                            "dhcp": dhcpCombo.currentText,
-                            "mtu": mtuInput.text
-                        }));
                     }
                 }
 
@@ -817,16 +805,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-OSD设置保存: ") + JSON.stringify({
-                            "setOsd": osdSetCheck.checked,
-                            "osdEnable": osdEnableCombo.currentText,
-                            "overlayInfo": osdOverlayCombo.currentText,
-                            "timePosition": osdTimePosCombo.currentText,
-                            "timeFormat": osdTimeFormatCombo.currentText,
-                            "showWeek": osdShowWeekCheck.checked,
-                            "timeDisplayPosition": osdTimeShowPosCombo.currentText,
-                            "titleContent": osdTitleInput.text
-                        }));
                     }
                 }
 
@@ -1286,24 +1264,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-28181接入1设置保存: ") + JSON.stringify({
-                            "setGb28181": gbSetCheck.checked,
-                            "enable": gbEnableCombo.currentText,
-                            "localSipPort": localSipPortInput.text,
-                            "sipServerId": sipServerIdInput.text,
-                            "sipServerDomain": sipServerDomainInput.text,
-                            "sipServerIp": sipServerIpInput.text(),
-                            "sipServerPort": sipServerPortInput.text,
-                            "sipUser": sipUserInput.text,
-                            "sipAuthId": sipAuthIdInput.text,
-                            "password": passwordInput.text,
-                            "confirmPassword": confirmPasswordInput.text,
-                            "registerExpire": registerExpireInput.text,
-                            "heartbeat": heartbeatInput.text,
-                            "heartbeatTimeout": heartbeatTimeoutInput.text,
-                            "streamIndex": streamIndexCombo.currentText,
-                            "alarmId": alarmIdInput.text
-                        }));
                     }
                 }
 
@@ -1609,17 +1569,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-视频采集设置保存: ") + JSON.stringify({
-                            "setVideoCapture": vcSetCheck.checked,
-                            "brightness": vcBrightnessInput.text,
-                            "saturation": vcSaturationInput.text,
-                            "sharpness": vcSharpnessInput.text,
-                            "contrast": vcContrastInput.text,
-                            "whiteBalance": vcWhiteBalanceCombo.currentText,
-                            "hFlip": vcHFlipCombo.currentText,
-                            "vFlip": vcVFlipCombo.currentText,
-                            "wdr": vcWdrCombo.currentText
-                        }));
                     }
                 }
 
@@ -2088,24 +2037,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-视频编码保存: ") + JSON.stringify({
-                            "setVideoEncode": veSetCheck.checked,
-                            "mainCodec": veMainCodecCombo.currentText,
-                            "mainResolution": veMainResCombo.currentText,
-                            "mainRateControl": veMainRateCtlCombo.currentText,
-                            "mainGop": veMainGopInput.text,
-                            "mainBitrate": veMainBitrateInput.text,
-                            "mainFps": veMainFpsCombo.currentText,
-                            "subCodec": veSubCodecCombo.currentText,
-                            "subResolution": veSubResCombo.currentText,
-                            "subRateControl": veSubRateCtlCombo.currentText,
-                            "subGop": veSubGopInput.text,
-                            "subBitrate": veSubBitrateInput.text,
-                            "subFps": veSubFpsCombo.currentText,
-                            "baseProfile": veBaseProfileCombo.currentText,
-                            "wdrMode": veWdrModeCombo.currentText,
-                            "privateData": vePrivateDataCombo.currentText
-                        }));
                     }
                 }
 
@@ -2291,13 +2222,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-音频编码保存: ") + JSON.stringify({
-                            "setAudioEncode": aeSetCheck.checked,
-                            "enable": aeEnableCombo.currentText,
-                            "audioType": aeTypeCombo.currentText,
-                            "sampleRate": aeSampleCombo.currentText,
-                            "bitrate": aeBitrateInput.text
-                        }));
                     }
                 }
 
@@ -2439,11 +2363,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-音量配置保存: ") + JSON.stringify({
-                            "setAudioReconfig": arSetCheck.checked,
-                            "captureVolume": arCaptureInput.text,
-                            "playVolume": arPlayInput.text
-                        }));
                     }
                 }
 
@@ -2465,10 +2384,6 @@ Dialog {
             onSwitchToggled: root.setChecked("motionDetect", checked)
             onSaveClicked: {
                 root.saveCurrentPanel();
-                console.log(qsTr("其它设置-移动侦测保存: ") + JSON.stringify({
-                    "setMotionDetect": mdPanel.switchChecked,
-                    "enable": mdEnableCombo.currentText
-                }));
             }
 
             // 与左侧树“移动侦测”前的复选框强绑定（双向同步）
@@ -2517,10 +2432,6 @@ Dialog {
             onSwitchToggled: root.setChecked("audioDetect", checked)
             onSaveClicked: {
                 root.saveCurrentPanel();
-                console.log(qsTr("其它设置-声音侦测保存: ") + JSON.stringify({
-                    "setAudioDetect": adPanel.switchChecked,
-                    "enable": adEnableCombo.currentText
-                }));
             }
 
             // 与左侧树“声音侦测”前的复选框强绑定（双向同步）
@@ -2669,14 +2580,10 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         if (accNewPwdInput.text !== accConfirmPwdInput.text) {
-                            console.log(qsTr("其它设置-账户管理保存失败: 两次输入的密码不一致"));
+                            saveTipBox.show(qsTr("温馨提示"), qsTr("两次输入的密码不一致"));
                             return ;
                         }
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-账户管理保存: ") + JSON.stringify({
-                            "modifyAdminPassword": accSetCheck.checked,
-                            "newPassword": accNewPwdInput.text
-                        }));
                     }
                 }
 
@@ -2838,12 +2745,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-定期维护保存: ") + JSON.stringify({
-                            "setMaintenance": mtSetCheck.checked,
-                            "enable": mtEnableCombo.currentText,
-                            "day": mtDayCombo.currentText,
-                            "time": mtTimeInput.time
-                        }));
                     }
                 }
 
@@ -2944,10 +2845,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-设备语言保存: ") + JSON.stringify({
-                            "setLanguage": langSetCheck.checked,
-                            "language": langCombo.currentText
-                        }));
                     }
                 }
 
@@ -3361,30 +3258,6 @@ Dialog {
                     text: qsTr("保存")
                     onClicked: {
                         root.saveCurrentPanel();
-                        console.log(qsTr("其它设置-时钟设置保存: ") + JSON.stringify({
-                            "setClock": ckSetCheck.checked,
-                            "mode": ckModeCombo.currentText,
-                            "timeZone": ckZoneCombo.currentText,
-                            "ntpServerIp": ckNtpIpInput.text,
-                            "ntpPort": ckNtpPortInput.text,
-                            "refreshInterval": ckRefreshInput.text,
-                            "manualTime": ckTimeInput.text,
-                            "setTime": ckSetTimeCheck.checked,
-                            "dstEnable": ckDstEnableCombo.currentText,
-                            "dstStart": {
-                                "month": ckDstStartMonthCombo.currentText,
-                                "weekSeq": ckDstStartWeekSeqCombo.currentText,
-                                "weekDay": ckDstStartWeekDayCombo.currentText,
-                                "time": ckDstStartTimePicker.time
-                            },
-                            "dstEnd": {
-                                "month": ckDstEndMonthCombo.currentText,
-                                "weekSeq": ckDstEndWeekSeqCombo.currentText,
-                                "weekDay": ckDstEndWeekDayCombo.currentText,
-                                "time": ckDstEndTimePicker.time
-                            },
-                            "dstOffset": ckDstOffsetCombo.currentText
-                        }));
                     }
                 }
 

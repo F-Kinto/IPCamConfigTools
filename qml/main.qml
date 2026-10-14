@@ -93,7 +93,7 @@ ApplicationWindow {
         }
         root.logAction("********** 网卡信息结束，共 " + root.nicList.length + " 张 **********");
         var cur = root.currentNic();
-        root.logAction("当前使用的网卡: " + (cur ? cur["displayName"] : qsTr("所有网卡")));
+        root.logAction("当前使用的网卡: " + (cur ? cur["displayName"] : "所有网卡")));
     }
 
     // 按配置文件中保存的网卡名匹配；匹配不到（含“All netCard”）则选中第一项“所有网卡”
@@ -211,20 +211,20 @@ ApplicationWindow {
         // 单次勾选就超过上限
         if (checked.length > root.maxLiveCount) {
             confirmBox.showTip(qsTr("温馨提示"), qsTr("最多同时播放%1台设备").arg(root.maxLiveCount));
-            root.logAction(qsTr("打开直播预览失败: 勾选%1台，超过上限%2台").arg(checked.length).arg(root.maxLiveCount));
+            root.logAction("打开直播预览失败: 勾选%1台，超过上限%2台".arg(checked.length).arg(root.maxLiveCount));
             return false;
         }
         // 合并后仍超过上限：已播满，需先关闭空闲的直播通道
         var merged = root.mergeLiveDevices(playing, checked);
         if (merged.length > root.maxLiveCount) {
             confirmBox.showTip(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
-            root.logAction(qsTr("打开直播预览失败: 已播放%1台，再播%2台会超过上限%3台").arg(playing.length).arg(merged.length - playing.length).arg(root.maxLiveCount));
+            root.logAction("打开直播预览失败: 已播放%1台，再播%2台会超过上限%3台".arg(playing.length).arg(merged.length - playing.length).arg(root.maxLiveCount));
             return false;
         }
         root.previewOpen = true;
         root.currentPage = 1;
         livePreviewPage.devices = merged;
-        root.logAction(qsTr("打开直播预览: %1 台设备").arg(livePreviewPage.devices.length));
+        root.logAction("打开直播预览: %1 台设备".arg(livePreviewPage.devices.length));
         return true;
     }
 
@@ -244,13 +244,13 @@ ApplicationWindow {
         var merged = root.mergeLiveDevices(playing, [dev]);
         if (merged.length > root.maxLiveCount) {
             confirmBox.showTip(qsTr("温馨提示"), qsTr("当前已播放%1台设备, 如要继续播放, 请先关闭空闲的直播通道").arg(playing.length));
-            root.logAction(qsTr("双击播放失败: 已播放%1台，超出上限%2台").arg(playing.length).arg(root.maxLiveCount));
+            root.logAction("双击播放失败: 已播放%1台，超出上限%2台".arg(playing.length).arg(root.maxLiveCount));
             return ;
         }
         root.previewOpen = true;
         root.currentPage = 1;
         livePreviewPage.devices = merged;
-        root.logAction(qsTr("双击播放直播: %1").arg(dev["ip"]));
+        root.logAction("双击播放直播: %1".arg(dev["ip"]));
     }
 
     // 请求关闭直播预览页：有设备在播时先弹确认（防误关正在直播的画面），
@@ -259,7 +259,7 @@ ApplicationWindow {
         var count = livePreviewPage.devices.length;
         if (count > 0) {
             confirmBox.showConfirm("tab", qsTr("温馨提示"), qsTr("当前有%1台设备正在直播, 确定要关闭吗?").arg(count));
-            root.logAction(qsTr("关闭直播预览确认弹窗: %1 台在播").arg(count));
+            root.logAction("关闭直播预览确认弹窗: %1 台在播".arg(count));
             return;
         }
         closeLivePreview();
@@ -275,7 +275,7 @@ ApplicationWindow {
             root.currentPage = 0;
 
         livePreviewPage.devices = [];
-        root.logAction(qsTr("关闭直播预览"));
+        root.logAction("关闭直播预览");
     }
 
     // 窗口关闭拦截：有设备在播时不直接关窗，先弹确认（同关页签逻辑）
@@ -369,7 +369,7 @@ ApplicationWindow {
         var nicName = nic ? (nic["humanReadableName"] || nic["displayName"] || "") : "";
         var ips = nic ? (nic["ipv4"] || []) : [];
         var nicDesc = nic ? (nicName + "(" + (ips.length > 0 ? ips[0] : qsTr("无IP")) + ")") : qsTr("所有网卡");
-        root.logAction(qsTr("设备搜索开始: 网卡=%1, 时长=%2秒").arg(nicDesc).arg(root.searchSeconds));
+        root.logAction("设备搜索开始: 网卡=%1, 时长=%2秒".arg(nicDesc).arg(root.searchSeconds));
         // 清空上一次的结果、勾选与选中行
         deviceModel.rows = [];
         root.selectedRows = [];
@@ -424,7 +424,7 @@ ApplicationWindow {
         if (!root.ensureDeviceSelected())
             return ;
 
-        root.logAction(qsTr("开始升级: 文件 %1 个, 设备 %2 台").arg(root.upgradeFiles.length).arg(root.selectedCount));
+        root.logAction("开始升级: 文件 %1 个, 设备 %2 台".arg(root.upgradeFiles.length).arg(root.selectedCount));
     }
 
     // 设备操作前置校验：列表为空或没勾选任何设备时提示，返回 false 表示中断
@@ -450,7 +450,7 @@ ApplicationWindow {
         var devices = DeviceManager.checkedDevices();
         for (var i = 0; i < devices.length; i++) {
             var id = devices[i]["uid"] || devices[i]["cloudId"] || devices[i]["mac"] || devices[i]["ip"] || "";
-            root.logAction(qsTr("发送修改IP请求: 设备ID=%1, 新IP=%2").arg(id).arg(ips[i]));
+            root.logAction("发送修改IP请求: 设备ID=%1, 新IP=%2".arg(id).arg(ips[i]));
         }
     }
 
@@ -521,7 +521,7 @@ ApplicationWindow {
 
         function onSearchFinished(count) {
             root.searching = false;
-            root.logAction(qsTr("设备搜索结束: 共发现 %1 台设备").arg(count));
+            root.logAction("设备搜索结束: 共发现 %1 台设备".arg(count));
         }
 
         target: DeviceScanner
@@ -601,7 +601,7 @@ ApplicationWindow {
                 text: qsTr("全选")
                 highlighted: true
                 onClicked: {
-                    root.logAction(qsTr("我点击了%1按钮").arg(text));
+                    root.logAction("我点击了%1按钮".arg(text));
                     root.selectAll();
                 }
             }
@@ -609,7 +609,7 @@ ApplicationWindow {
             AppButton {
                 text: qsTr("反选")
                 onClicked: {
-                    root.logAction(qsTr("我点击了%1按钮").arg(text));
+                    root.logAction("我点击了%1按钮".arg(text));
                     root.invertSelection();
                 }
             }
@@ -625,7 +625,7 @@ ApplicationWindow {
             AppCheckBox {
                 Layout.preferredHeight: root.controlHeight
                 text: qsTr("主码流播放")
-                onToggled: root.logAction(qsTr("%1已%2").arg(text).arg(checked ? qsTr("勾选") : qsTr("取消勾选")))
+                onToggled: root.logAction("%1已%2".arg(text).arg(checked ? "勾选" : "取消勾选"))
             }
 
             Item {
@@ -654,7 +654,7 @@ ApplicationWindow {
                 onActivated: {
                     root.saveNicSelection();
                     var nic = root.currentNic();
-                    root.logAction(qsTr("网卡切换为'%1'").arg(nic ? nic["displayName"] : qsTr("所有网卡")));
+                    root.logAction("网卡切换为'%1'".arg(nic ? nic["displayName"] : "所有网卡")));
                 }
             }
 
@@ -664,7 +664,7 @@ ApplicationWindow {
                 Layout.fillWidth: false
                 text: qsTr("系统配置")
                 onClicked: {
-                    root.logAction(qsTr("我点击了%1按钮").arg(text));
+                    root.logAction("我点击了%1按钮".arg(text));
                     systemConfigDialog.open();
                 }
             }
@@ -943,7 +943,7 @@ ApplicationWindow {
                         text: root.searching ? qsTr("搜索中...") : qsTr("设备搜索")
                         enabled: !root.searching
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮").arg(qsTr("设备搜索")));
+                            root.logAction("我点击了%1按钮".arg("设备搜索"));
                             root.searchDevices();
                         }
                     }
@@ -956,7 +956,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("设定IP")
                             onClicked: {
-                                root.logAction(qsTr("我点击了%1按钮").arg(text));
+                                root.logAction("我点击了%1按钮".arg(text));
                                 setIpDialog.open();
                             }
                         }
@@ -965,7 +965,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("执行修改")
                             onClicked: {
-                                root.logAction(qsTr("我点击了%1按钮（设定IP）").arg(text));
+                                root.logAction("我点击了%1按钮（设定IP）".arg(text));
                                 root.executeSetIp();
                             }
                         }
@@ -981,7 +981,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: qsTr("同步时间")
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮").arg(text));
+                            root.logAction("我点击了%1按钮".arg(text));
                             root.ensureDeviceSelected();
                         }
                     }
@@ -990,7 +990,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: qsTr("重启设备")
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮").arg(text));
+                            root.logAction("我点击了%1按钮".arg(text));
                             if (!root.ensureDeviceSelected())
                                 return ;
                             confirmBox.showConfirm("reboot", qsTr("温馨提示"), qsTr("确定要重启已勾选的设备吗?"));
@@ -1001,7 +1001,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: qsTr("恢复出厂设置")
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮").arg(text));
+                            root.logAction("我点击了%1按钮".arg(text));
                             if (!root.ensureDeviceSelected())
                                 return ;
                             confirmBox.showConfirm("factoryReset", qsTr("温馨提示"), qsTr("恢复出厂设置后设备会重启且设备IP可能变更, 需要重新搜索设备, 确定要对已勾选的设备执行该操作吗?"));
@@ -1012,7 +1012,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: qsTr("播放勾选设备")
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮").arg(text));
+                            root.logAction("我点击了%1按钮".arg(text));
                             if (!root.ensureDeviceSelected())
                                 return ;
 
@@ -1033,7 +1033,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("设定OSD")
                             onClicked: {
-                                root.logAction(qsTr("我点击了%1按钮").arg(text));
+                                root.logAction("我点击了%1按钮".arg(text));
                                 osdDialog.open();
                             }
                         }
@@ -1042,7 +1042,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("执行修改")
                             onClicked: {
-                                root.logAction(qsTr("我点击了%1按钮（设定OSD）").arg(text));
+                                root.logAction("我点击了%1按钮（设定OSD）".arg(text));
                                 root.ensureDeviceSelected();
                             }
                         }
@@ -1052,7 +1052,7 @@ ApplicationWindow {
                     AppCheckBox {
                         Layout.preferredHeight: root.controlHeight
                         text: qsTr("锁定默认参数")
-                        onToggled: root.logAction(qsTr("%1已%2").arg(text).arg(checked ? qsTr("勾选") : qsTr("取消勾选")))
+                        onToggled: root.logAction("%1已%2".arg(text).arg(checked ? "勾选" : "取消勾选"))
                     }
 
                     RowLayout {
@@ -1063,7 +1063,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("配置其他参数")
                             onClicked: {
-                                root.logAction(qsTr("我点击了%1按钮").arg(text));
+                                root.logAction("我点击了%1按钮".arg(text));
                                 otherSettingsDialog.open();
                             }
                         }
@@ -1072,7 +1072,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             text: qsTr("执行修改")
                             onClicked: {
-                                root.logAction(qsTr("我点击了%1按钮（配置其他参数）").arg(text));
+                                root.logAction("我点击了%1按钮（配置其他参数）".arg(text));
                                 root.ensureDeviceSelected();
                             }
                         }
@@ -1125,7 +1125,7 @@ ApplicationWindow {
                     AppButton {
                         text: qsTr("浏览")
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮（升级文件）").arg(text));
+                            root.logAction("我点击了%1按钮（升级文件）".arg(text));
                             upgradeFileDialog.open();
                         }
                     }
@@ -1133,7 +1133,7 @@ ApplicationWindow {
                     AppButton {
                         text: qsTr("文件一键升级")
                         onClicked: {
-                            root.logAction(qsTr("我点击了%1按钮").arg(text));
+                            root.logAction("我点击了%1按钮".arg(text));
                             root.startFileUpgrade();
                         }
                     }
@@ -1160,12 +1160,12 @@ ApplicationWindow {
 
                     AppButton {
                         text: qsTr("浏览")
-                        onClicked: root.logAction(qsTr("我点击了%1按钮（升级目录）").arg(text))
+                        onClicked: root.logAction("我点击了%1按钮（升级目录）".arg(text))
                     }
 
                     AppButton {
                         text: qsTr("目录升级")
-                        onClicked: root.logAction(qsTr("我点击了%1按钮").arg(text))
+                        onClicked: root.logAction("我点击了%1按钮".arg(text))
                     }
 
                 }
@@ -1175,7 +1175,7 @@ ApplicationWindow {
                     Layout.preferredHeight: root.controlHeight
                     model: [qsTr("上传音频文件"), qsTr("上传配置文件")]
                     visible: false
-                    onActivated: root.logAction(qsTr("上传类型切换为'%1'").arg(currentText))
+                    onActivated: root.logAction("上传类型切换为'%1'".arg(currentText))
                 }
 
                 AppTextField {
@@ -1191,12 +1191,12 @@ ApplicationWindow {
 
                     AppButton {
                         text: qsTr("浏览")
-                        onClicked: root.logAction(qsTr("我点击了%1按钮（上传文件）").arg(text))
+                        onClicked: root.logAction("我点击了%1按钮（上传文件）".arg(text))
                     }
 
                     AppButton {
                         text: qsTr("开始上传")
-                        onClicked: root.logAction(qsTr("我点击了%1按钮").arg(text))
+                        onClicked: root.logAction("我点击了%1按钮".arg(text))
                     }
 
                 }
@@ -1217,7 +1217,7 @@ ApplicationWindow {
         // 保存：更新搜索时间并弹“保存成功”提示（accept 触发 onAccepted）
         onOkClicked: {
             root.searchSeconds = searchTimeSpin.displayText
-            root.logAction(qsTr("我点击了%1按钮（系统配置）").arg(systemConfigDialog.okText))
+            root.logAction("我点击了%1按钮（系统配置）".arg(systemConfigDialog.okText))
             systemConfigDialog.accept()
         }
         // 取消：直接关闭
@@ -1424,10 +1424,10 @@ ApplicationWindow {
                 root.executeSetIpChecked();
                 break;
             case "reboot":
-                root.logAction(qsTr("已确认重启设备: %1 台").arg(root.selectedCount));
+                root.logAction("已确认重启设备: %1 台".arg(root.selectedCount));
                 break;
             case "factoryReset":
-                root.logAction(qsTr("已确认恢复出厂设置: %1 台").arg(root.selectedCount));
+                root.logAction("已确认恢复出厂设置: %1 台".arg(root.selectedCount));
                 break;
             case "tab":
                 root.closeLivePreview();
@@ -1463,7 +1463,7 @@ ApplicationWindow {
             if (paths.length > 0)
                 ConfigureManager.upgradeDir = root.pathDirName(paths[0]);
 
-            root.logAction(qsTr("已选择升级文件: %1").arg(root.upgradeFileSummary()));
+            root.logAction("已选择升级文件: %1".arg(root.upgradeFileSummary()));
         }
     }
 
@@ -1534,8 +1534,8 @@ ApplicationWindow {
         onTriggered: {
             // 阻塞等所有拉流线程真实退出再退程序（不是固定延时盲等—Live555 慢退出时进程拆除线程仍在跑会崩）。无任务立即返回
             var ok = DeviceManager.waitForLiveStreamsExit(10 * 1000);
-            root.logAction(ok ? qsTr("直播线程已全部退出，程序退出")
-                              : qsTr("等待直播线程退出超时(10s)，兜底退出"));
+            root.logAction(ok ? "直播线程已全部退出，程序退出"
+                              : "等待直播线程退出超时(10s)，兜底退出");
             Qt.quit();
         }
     }

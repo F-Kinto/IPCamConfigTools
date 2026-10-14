@@ -115,7 +115,6 @@ AppContentDialog {
             onCheckedChanged: {
                 if (checked) {
                     batchCheck.checked = false;
-                    console.log(qsTr("设定IP-勾选修改IP起始地址, 已取消批量修改设定IP"));
                 }
             }
         }
@@ -134,7 +133,6 @@ AppContentDialog {
             onCheckedChanged: {
                 if (checked) {
                     startAddrCheck.checked = false;
-                    console.log(qsTr("设定IP-勾选批量修改设定IP, 已取消修改IP起始地址"));
                 }
             }
         }

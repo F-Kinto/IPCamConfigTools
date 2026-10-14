@@ -85,7 +85,6 @@ AppContentDialog {
     onOkClicked: {
         root.saveShared();
         root.accept();
-        console.log(qsTr("OSD修改-保存: ") + JSON.stringify(root.collectConfig()));
     }
 
     // ===== 设定时间和标题 =====
