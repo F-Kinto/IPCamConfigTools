@@ -5,6 +5,7 @@
         <file>SetOsdDialog.qml</file>
         <file>OtherSettingsDialog.qml</file>
         <file>LivePreviewPage.qml</file>
+        <file>CommandPanel.qml</file>
         <file>Controls/AppButton.qml</file>
         <file>Controls/AppBusyMask.qml</file>
         <file>Controls/AppCheckBox.qml</file>

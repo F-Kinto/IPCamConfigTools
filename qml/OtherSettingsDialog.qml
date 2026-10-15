@@ -132,6 +132,9 @@ Dialog {
 
     // 设置单个子项勾选状态（重建对象以触发绑定更新）
     function setChecked(key, value) {
+        if (root.checkedMap[key] === value)
+            return ;
+
         var m = {
         };
         for (var k in root.checkedMap) m[k] = root.checkedMap[k]
@@ -262,6 +265,8 @@ Dialog {
             panelLoader.item.writeShared(root.sharedOsd);
 
         root.markSaved(root.selectedKey);
+        // 保存即固化全部勾选状态：任何界面点保存，左侧子节点勾选与各页
+        root.openCheckedMap = root.copyMap(root.checkedMap);
         saveTipBox.show(qsTr("温馨提示"), qsTr("保存成功"));
     }
 
