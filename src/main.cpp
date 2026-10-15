@@ -7,6 +7,7 @@
 
 #include "Public/AppLogger.h"
 #include "Public/ConfigureManager.h"
+#include "Public/DeviceApiClient.h"
 #include "Public/DeviceManager.h"
 #include "Public/DeviceScanner.h"
 #include "Public/TranslatorManager.h"
@@ -47,6 +48,8 @@ int main(int argc, char* argv[]) {
     registerSingleton<DeviceScanner>("DeviceScanner");
     // 界面选中设备的管理者：勾选多台（QMap<uid, 设备信息>）+ 当前选中一台
     registerSingleton<DeviceManager>("DeviceManager");
+    // 通用异步 HTTP 调用封装（处理链同 VmsTools queryRequestV5：组包 -> AsynRequest -> 按 customMessage 分发响应）
+    registerSingleton<DeviceApiClient>("DeviceApiClient");
 
     // RTSP 直播渲染组件（模块 IPCam.Rtsp 1.0）：device 赋值自动拉流，
     // 内部走 Live555 收流 + FFmpeg 解码（同步自 VmsTools，固定 RTSP 单路）

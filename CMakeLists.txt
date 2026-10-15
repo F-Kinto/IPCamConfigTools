@@ -28,10 +28,13 @@ set(PUBLIC_SOURCES
     src/Public/DeviceScanner.cpp
     src/Public/DeviceManager.h
     src/Public/DeviceManager.cpp
+    src/Public/DeviceApiClient.h
+    src/Public/DeviceApiClient.cpp
 )
 
-# HTTP 同步请求库（同步自 VmsTools_v2/common）：
+# HTTP 请求库（同步自 VmsTools_v2/common）：
 # SynRequestBlock（QEventLoop 阻塞收包，须在工作线程使用）
+# AsynRequest（异步收包，主线程直接调用，结果经 signalResponseRequest 回调）
 #   -> BaseRequest（QNetworkAccessManager + QTimer 超时封装）
 #   -> RequestMessageData（请求数据结构）-> BaseDataStruct（基类）
 set(NETWORK_SOURCES
@@ -43,6 +46,8 @@ set(NETWORK_SOURCES
     src/Network/BaseRequest.cpp
     src/Network/SynRequestBlock.h
     src/Network/SynRequestBlock.cpp
+    src/Network/AsynRequest.h
+    src/Network/AsynRequest.cpp
 )
 
 # RTSP 直播模块（同步自 VmsTools：Live555 收流 + FFmpeg 解码 + YUV 渲染）
