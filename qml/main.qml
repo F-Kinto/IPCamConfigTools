@@ -64,7 +64,11 @@ ApplicationWindow {
         };
     }))
     // ===== 页签：直播预览 =====
-    // 同时播放的最大路数（直播页面最多 4 个窗口）
+    // 直播模式开关（两套逻辑二选一）：
+    // false = 多路模式：勾选设备合并进播放列表，最多 maxLiveCount 路同时播放
+    // true  = 单路模式
+    property bool singleLiveMode: true
+    // 多路模式下同时播放的最大路数（直播页面最多 4 个窗口；单路模式不使用）
     readonly property int maxLiveCount: 4
 
     // ===== 网卡相关 =====
@@ -200,12 +204,28 @@ ApplicationWindow {
         return list;
     }
 
-    // 打开直播预览页：以已勾选设备为播放列表，切到“直播预览”页签。
+    // 打开直播预览页：以已勾选设备为播放列表，切到“直播预览”页签。。
     function openLivePreview() {
         var checked = DeviceManager.checkedDevices();
         // 播放前把缓存的 RTSP 凭据合并进来（设备发现时已预取，第一次起流即带真实凭据）
         for (var i = 0; i < checked.length; i++)
             checked[i] = DeviceManager.mergeRtspCredential(checked[i]);
+        // 单路模式：只播勾选的第一台
+        if (root.singleLiveMode) {
+            var curDev = root.previewOpen && livePreviewPage.devices.length > 0 ? livePreviewPage.devices[0] : null;
+            root.previewOpen = true;
+            root.currentPage = 1;
+            if (checked.length > 0) {
+                var firstDev = checked[0];
+                if (curDev === null || DeviceManager.keyOf(firstDev) !== DeviceManager.keyOf(curDev)) {
+                    livePreviewPage.devices = [firstDev];
+                    root.logAction("单路模式播放: 关闭%1, 播放%2".arg(curDev !== null ? curDev["ip"] : "无").arg(firstDev["ip"]));
+                } else {
+                    root.logAction("单路模式播放: %1 已在播, 切到直播页".arg(firstDev["ip"]));
+                }
+            }
+            return true;
+        }
         // 页签已打开时，在现有播放列表基础上追加（重复勾选的不会重复开窗口）
         var playing = root.previewOpen ? livePreviewPage.devices : [];
         // 单次勾选就超过上限
@@ -228,7 +248,7 @@ ApplicationWindow {
         return true;
     }
 
-    // 双击表格某行：直接播放该行设备（无需先勾选），与已播列表按设备去重合并，
+    // 双击表格某行：直接播放该行设备
     // 合并后超过“最多 4 路”上限时弹窗提示，播放列表保持原样
     function openLivePreviewOfRow(row) {
         if (row < 0 || row >= deviceModel.rowCount)
@@ -240,6 +260,19 @@ ApplicationWindow {
 
         // 播放前把缓存的 RTSP 凭据合并进来（设备发现时已预取，第一次起流即带真实凭据）
         dev = DeviceManager.mergeRtspCredential(dev);
+        // 单路模式：双击的是已在播设备则仅跳转直播页
+        if (root.singleLiveMode) {
+            var curDev = root.previewOpen && livePreviewPage.devices.length > 0 ? livePreviewPage.devices[0] : null;
+            root.previewOpen = true;
+            root.currentPage = 1;
+            if (curDev === null || DeviceManager.keyOf(dev) !== DeviceManager.keyOf(curDev)) {
+                livePreviewPage.devices = [dev];
+                root.logAction("单路模式双击播放: 关闭%1, 播放%2".arg(curDev !== null ? curDev["ip"] : "无").arg(dev["ip"]));
+            } else {
+                root.logAction("单路模式双击播放: %1 已在播, 切到直播页".arg(dev["ip"]));
+            }
+            return ;
+        }
         var playing = root.previewOpen ? livePreviewPage.devices : [];
         var merged = root.mergeLiveDevices(playing, [dev]);
         if (merged.length > root.maxLiveCount) {
