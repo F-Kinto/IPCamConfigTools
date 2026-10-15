@@ -33,6 +33,8 @@ Item {
 
     // 要播放的设备列表（QVariantMap 数组，来自 DeviceManager.checkedDevices()）
     property var devices: []
+    // 主码流播放（main.qml 顶部工具栏勾选状态透传，默认不勾选）：true=ch00_0 主码流，false=ch00_1 子码流
+    property bool mainStream: false
     // 内部把 deviceModel 回写到 devices 时置位：跳过 onDevicesChanged 回灌
     property bool _syncing: false
     // 最多同时显示的直播窗口数（main.qml 里点击播放时会先拦截，这里是兜底）
@@ -309,6 +311,8 @@ Item {
 
                         z: 1
                         anchors.fill: parent
+                        // 起流时按勾选状态取主/子码流（ch00_0/ch00_1）
+                        mainStream: root.mainStream
                         device: model.device
 
                         // 画面区：VideoOutput 消费 yuvProvider 的 YUV 帧。

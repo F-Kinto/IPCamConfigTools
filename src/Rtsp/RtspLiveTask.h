@@ -85,8 +85,10 @@ class RtspLiveTask : public QObject {
      * @param userName RTSP 用户名（空则拼无认证 URL）
      * @param password RTSP 密码
      * @param sampleRate 音频采样率（默认 8000，与设备端一致）
+     * @param mainStream 主码流标志（true=ch00_0 主码流，false=ch00_1 子码流）
      */
-    void start(const QString& ip, const QString& userName, const QString& password, int sampleRate = 8000);
+    void start(const QString& ip, const QString& userName, const QString& password, int sampleRate = 8000,
+               bool mainStream = false);
 
     /** 停止拉流并复位状态（可重复调用；不等待线程退出） */
     void stop();
@@ -188,6 +190,7 @@ class RtspLiveTask : public QObject {
     QString m_userName;  /**< RTSP 用户名 */
     QString m_password;  /**< RTSP 密码 */
     int     m_sampleRate = 8000; /**< 音频采样率 */
+    bool    m_mainStream = false; /**< 主码流标志（true=ch00_0，false=ch00_1），默认子码流 */
 
     std::atomic<int> m_isStopTask{0};   /**< 停止标记（0 运行 1 停止） */
     std::atomic<int> m_isInitDone{0};   /**< init 完成标记（recv 线程循环条件） */

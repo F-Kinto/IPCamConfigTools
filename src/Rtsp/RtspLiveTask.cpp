@@ -75,7 +75,8 @@ RtspLiveTask::~RtspLiveTask()
     // stop() 只是复位幂等兜底。
 }
 
-void RtspLiveTask::start(const QString& ip, const QString& userName, const QString& password, int sampleRate)
+void RtspLiveTask::start(const QString& ip, const QString& userName, const QString& password, int sampleRate,
+                         bool mainStream)
 {
     if (ip.isEmpty()) {
         emit playResult(1, "device ip is empty");
@@ -86,6 +87,7 @@ void RtspLiveTask::start(const QString& ip, const QString& userName, const QStri
     m_userName   = userName;
     m_password   = password;
     m_sampleRate = sampleRate;
+    m_mainStream = mainStream;
 
     m_isStopTask = 0;
     m_isInitDone = 0;
@@ -279,9 +281,11 @@ bool RtspLiveTask::initRtspService(const std::shared_future<bool>& quitFuture)
     qInfo() << "LOG::initRtspService QThread ID:" << QThread::currentThreadId();
 
     // URL 拼装（同步自 RtspDecodeTask.cpp:1001）：rtsp://user:pwd@ip/live/ch00_0
+    // 码流后缀由主界面“主码流播放”勾选状态决定：勾选 ch00_0 主码流，未勾选 ch00_1 子码流
+    const QString streamSuffix = m_mainStream ? QStringLiteral("ch00_0") : QStringLiteral("ch00_1");
     QString rtspUrl = (!m_userName.isEmpty() && !m_password.isEmpty())
-                          ? QString("rtsp://%1:%2@%3/live/ch00_0").arg(m_userName).arg(m_password).arg(m_ip)
-                          : QString("rtsp://%1/live/ch00_0").arg(m_ip);
+                          ? QString("rtsp://%1:%2@%3/live/%4").arg(m_userName).arg(m_password).arg(m_ip).arg(streamSuffix)
+                          : QString("rtsp://%1/live/%2").arg(m_ip).arg(streamSuffix);
 
     qInfo() << "LOG::RtspLiveTask step[2/5] open rtsp url:" << rtspUrl;
 

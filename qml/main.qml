@@ -42,6 +42,11 @@ ApplicationWindow {
     property bool previewOpen: false
     // 当前显示的页：0=设备列表，1=直播预览
     property int currentPage: 0
+    // 直播中切回设备列表页：该页操作已全部锁定，弹 toast 告知
+    onCurrentPageChanged: {
+        if (root.currentPage === 0 && root.previewOpen)
+            appToast.show(root.liveLockTip);
+    }
     // 设备列表页：操作面板与升级模块折叠开关（true=已收起，设备列表占满整行）
     property bool sidePanelsHidden: false
     // 固件升级：已选择的升级文件（本地路径列表，*.bin，可多选）
@@ -68,6 +73,10 @@ ApplicationWindow {
     // false = 多路模式：勾选设备合并进播放列表，最多 maxLiveCount 路同时播放
     // true  = 单路模式
     property bool singleLiveMode: true
+    // 主码流播放（顶部工具栏勾选状态，默认不勾选）：起流 URL 用 ch00_0（主码流）/ ch00_1（子码流）
+    property bool mainStreamPlay: false
+    // 直播中锁定设备列表页的提示文案（按钮/输入框/下拉框/勾选/双击全禁用时弹出）
+    readonly property string liveLockTip: qsTr("直播过程中, 该页面禁止操作, 请关闭直播后再操作")
     // 多路模式下同时播放的最大路数（直播页面最多 4 个窗口；单路模式不使用）
     readonly property int maxLiveCount: 4
 
@@ -150,6 +159,11 @@ ApplicationWindow {
 
     // 表格里某一行的复选框勾选/取消：同步进 selectedRows，“已选数量”与“请先选择设备”的校验都读这份数据，自动保持一致
     function setRowChecked(row, checked) {
+        // 直播中锁定勾选：关闭直播前不允许变更“已选设备”
+        if (root.previewOpen) {
+            appToast.show(root.liveLockTip);
+            return ;
+        }
         var list = root.selectedRows.slice();
         var idx = list.indexOf(row);
         if (checked && idx < 0)
@@ -260,17 +274,28 @@ ApplicationWindow {
 
         // 播放前把缓存的 RTSP 凭据合并进来（设备发现时已预取，第一次起流即带真实凭据）
         dev = DeviceManager.mergeRtspCredential(dev);
-        // 单路模式：双击的是已在播设备则仅跳转直播页
+        // 多路模式：直播中锁定设备列表，双击不再追加播放
+        if (!root.singleLiveMode && root.previewOpen) {
+            appToast.show(root.liveLockTip);
+            root.logAction("双击播放被拦截: 直播中锁定设备列表");
+            return ;
+        }
+        // 单路模式：直播中双击“当前在播的那台”是跳转查看（不改变直播状态，
+        // 保留切页）；双击其他设备属于换台，需先关闭直播，弹 toast 禁止
         if (root.singleLiveMode) {
             var curDev = root.previewOpen && livePreviewPage.devices.length > 0 ? livePreviewPage.devices[0] : null;
+            if (curDev !== null) {
+                if (DeviceManager.keyOf(dev) === DeviceManager.keyOf(curDev)) {
+                    root.currentPage = 1;
+                    root.logAction("单路模式双击: %1 已在播, 切到直播页".arg(dev["ip"]));
+                } else {
+                    appToast.show(root.liveLockTip);
+                }
+                return ;
+            }
             root.previewOpen = true;
             root.currentPage = 1;
-            if (curDev === null || DeviceManager.keyOf(dev) !== DeviceManager.keyOf(curDev)) {
-                livePreviewPage.devices = [dev];
-                root.logAction("单路模式双击播放: 关闭%1, 播放%2".arg(curDev !== null ? curDev["ip"] : "无").arg(dev["ip"]));
-            } else {
-                root.logAction("单路模式双击播放: %1 已在播, 切到直播页".arg(dev["ip"]));
-            }
+            livePreviewPage.devices = [dev];
             return ;
         }
         var playing = root.previewOpen ? livePreviewPage.devices : [];
@@ -485,7 +510,7 @@ ApplicationWindow {
     // 接收设备搜索结果
     Connections {
         function onDeviceFound(device) {
-            // 设备一发现就异步预取 RTSP 凭据（存进 DeviceManager 缓存）
+            // 设备一发现就异步预取 RTSP 凭据
             DeviceManager.fetchRtspCredential(device);
             deviceModel.appendRow(device);
         }
@@ -546,6 +571,9 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             spacing: ScreenTools.scaleNum(16)
+            // 只在设备列表页显示；直播中切回本页时保持显示但整行禁用
+            visible: root.currentPage === 0
+            enabled: !root.previewOpen
 
             AppButton {
                 text: qsTr("全选")
@@ -575,7 +603,11 @@ ApplicationWindow {
             AppCheckBox {
                 Layout.preferredHeight: root.controlHeight
                 text: qsTr("主码流播放")
-                onToggled: root.logAction("%1已%2".arg(text).arg(checked ? "勾选" : "取消勾选"))
+                checked: root.mainStreamPlay
+                onToggled: {
+                    root.mainStreamPlay = checked;
+                    root.logAction("%1已%2".arg(text).arg(checked ? "勾选" : "取消勾选"));
+                }
             }
 
             Item {
@@ -832,6 +864,8 @@ ApplicationWindow {
 
                                 anchors.fill: parent
                                 anchors.margins: ScreenTools.scaleNum(2)
+                                // 主码流播放勾选状态透传：各直播窗口起流时选 ch00_0/ch00_1
+                                mainStream: root.mainStreamPlay
                                 visible: root.currentPage === 1
                             }
 
@@ -879,6 +913,8 @@ ApplicationWindow {
                     width: (midRow.width - midRow.spacing * 2 - collapseBtn.width) / 4
                     height: midRow.height
                     visible: root.currentPage === 0 && !root.sidePanelsHidden
+                    // 直播中整面板禁用（搜索/播放/重启/修改IP/OSD 等按钮与输入全锁定）
+                    enabled: !root.previewOpen
                     host: root
                     confirmBox: confirmBox
                     setIpDialog: setIpDialog
@@ -901,6 +937,8 @@ ApplicationWindow {
             Layout.preferredHeight: ScreenTools.scaleNum(120)
             title: qsTr("固件升级")
             visible: root.currentPage === 0 && !root.sidePanelsHidden
+            // 直播中固件升级区禁用（浏览/一键升级不可点）
+            enabled: !root.previewOpen
 
             GridLayout {
                 columns: 4
@@ -1191,6 +1229,11 @@ ApplicationWindow {
     //   "factoryReset"   - 恢复出厂设置已勾选设备（同上）
     //   "tab"            - 关闭直播预览页签（安全退出在播设备）
     //   "window"         - 退出程序
+    // 全局轻提示 toast（非模态、自动消失）：直播锁定设备列表等场景使用
+    AppToast {
+        id: appToast
+    }
+
     AppMessageBox {
         id: confirmBox
 
@@ -1289,6 +1332,18 @@ ApplicationWindow {
         text: qsTr("正在查询IP占用状态...")
     }
 
+    // ===== 其它设置弹窗的探测遮罩 =====
+    // 网络设置面板点“保存”后异步探测 IP 占用期间，盖住整个弹窗（含标题栏与关闭按钮）并吞掉鼠标事件。
+    AppBusyMask {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: otherSettingsDialog.width
+        height: otherSettingsDialog.height
+        z: 1000
+        busy: otherSettingsDialog.showMask && otherSettingsDialog.visible
+        text: qsTr("正在查询IP占用状态...")
+    }
+
     // ===== OSD参数共享存储：“OSD修改”弹窗 与 “其它设置-OSD设置”页共用同一份已保存参数 =====
     QtObject {
         id: osdConfig
@@ -1312,6 +1367,10 @@ ApplicationWindow {
     OtherSettingsDialog {
         id: otherSettingsDialog
         sharedOsd: osdConfig
+        // 网络设置联动数据源：本机网卡列表 / 主界面选中网卡（null=所有网卡）/ 设备列表第一台设备 IP
+        nicList: root.nicList
+        selectedNic: root.currentNic()
+        firstDeviceIp: deviceModel.rowCount > 0 ? (deviceModel.rows[0]["ip"] || "") : ""
     }
 
     // ===== 设备搜索遮罩 =====

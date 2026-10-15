@@ -79,6 +79,8 @@ class RtspVideoItem : public QQuickItem {
     Q_PROPERTY(QString password READ password WRITE setPassword NOTIFY passwordChanged)
     // 音频采样率（默认 8000，与设备端约定一致）
     Q_PROPERTY(int sampleRate READ sampleRate WRITE setSampleRate NOTIFY sampleRateChanged)
+    // 主码流标志（true=ch00_0 主码流，false=ch00_1 子码流；起流时快照，变更不触发重连）
+    Q_PROPERTY(bool mainStream READ mainStream WRITE setMainStream NOTIFY mainStreamChanged)
     // YUV 帧提供者（QML VideoOutput 的 source）
     Q_PROPERTY(YuvProvider* yuvProvider READ yuvProvider CONSTANT)
     // 是否已收到视频帧（首帧到达后置 true）
@@ -110,6 +112,9 @@ class RtspVideoItem : public QQuickItem {
     int  sampleRate() const;
     void setSampleRate(int rate);
 
+    bool mainStream() const;
+    void setMainStream(bool main);
+
     YuvProvider* yuvProvider() const;
 
     bool hasVideoData() const;
@@ -120,6 +125,7 @@ class RtspVideoItem : public QQuickItem {
     void userNameChanged();
     void passwordChanged();
     void sampleRateChanged();
+    void mainStreamChanged();
     void hasVideoDataChanged();
     void playStateChanged();
 
@@ -149,6 +155,7 @@ class RtspVideoItem : public QQuickItem {
     QString       m_userName;   /**< RTSP 用户名（默认 admin） */
     QString       m_password;   /**< RTSP 密码（默认空） */
     int           m_sampleRate = 8000;
+    bool          m_mainStream = false; /**< 主码流标志（true=ch00_0，false=ch00_1），默认子码流 */
 
     RtspLiveTask* m_task = nullptr;  /**< 拉流任务（无父对象，寿命由 stopAndDeleteLater 控制） */
     YuvProvider*  m_frameProvider = nullptr; /**< YUV 帧提供者 */

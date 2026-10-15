@@ -27,6 +27,17 @@ Dialog {
     // 关闭窗口后卸掉右侧面板：Dialog 关闭只是隐藏，面板实例不会销毁，
     // 不卸掉的话未保存的编辑会一直留着，下次打开也不会重新走“回填已保存值/默认值”的流程
     property bool panelSuspended: false
+    // ===== 网络设置联动数据源（由 main.qml 注入）=====
+    // 本机网卡列表（ipv4/netmask/gateway 等字段）
+    property var nicList: []
+    // 主界面当前选中的网卡；选中“所有网卡”时为 null
+    property var selectedNic: null
+    // 设备列表第一台设备的 IP；列表为空时为空串
+    property string firstDeviceIp: ""
+    // 网络设置保存前异步探测占用期间：遮罩显隐（供 main.qml 里挂在 Overlay 层的 AppBusyMask 绑定）
+    property bool showMask: false
+    // 正在异步探测占用的 IP：请求/响应用它匹配，防止过期响应串扰
+    property string pendingIp: ""
     // 分类树数据：key 用于右侧面板路由
     readonly property var groups: [{
         "name": qsTr("网络参数"),
@@ -270,6 +281,79 @@ Dialog {
         saveTipBox.show(qsTr("温馨提示"), qsTr("保存成功"));
     }
 
+    // 点分 IP 转 4 段整数数组；格式非法返回 null
+    function ipToIntArray(ip) {
+        if (typeof ip !== "string")
+            return null;
+
+        var parts = ip.split(".");
+        if (parts.length !== 4)
+            return null;
+
+        var out = [];
+        for (var i = 0; i < 4; i++) {
+            var n = parseInt(parts[i], 10);
+            if (isNaN(n) || n < 0 || n > 255)
+                return null;
+
+            out.push(n);
+        }
+        return out;
+    }
+
+    // 按 mask 判断两 IP 是否处于同一网段
+    function sameSubnet(ipA, ipB, mask) {
+        var a = ipToIntArray(ipA);
+        var b = ipToIntArray(ipB);
+        var m = ipToIntArray(mask);
+        if (!a || !b || !m)
+            return false;
+
+        for (var i = 0; i < 4; i++) {
+            if ((a[i] & m[i]) !== (b[i] & m[i]))
+                return false;
+
+        }
+        return true;
+    }
+
+    // 网卡信息 → IP/掩码/网关 显示值（网关取不到时显示 0.0.0.0，与设定IP弹窗口径一致）
+    function nicInfoOf(nic) {
+        var ips = nic["ipv4"] || [];
+        var gw = nic["gateway"] || "";
+        return {
+            "ip": ips.length > 0 ? ips[0] : "",
+            "mask": nic["netmask"] || "",
+            "gateway": gw.length > 0 ? gw : "0.0.0.0"
+        };
+    }
+
+    // 网络设置 IP/掩码/网关 的联动默认值：
+    // 1) 设备列表非空：与本机中与第一台设备同网段的网卡一致（找不到同网段网卡回退到后两条）；
+    // 2) 列表为空且选中具体网卡：与选中网卡一致；
+    // 3) 列表为空且选中“所有网卡”：与本机第一张有 IPv4 的网卡一致
+    readonly property var networkInfo: {
+        if (root.firstDeviceIp !== "") {
+            for (var i = 0; i < root.nicList.length; i++) {
+                var ips = root.nicList[i]["ipv4"] || [];
+                var mask = root.nicList[i]["netmask"] || "";
+                if (ips.length > 0 && root.sameSubnet(ips[0], root.firstDeviceIp, mask))
+                    return root.nicInfoOf(root.nicList[i]);
+            }
+        }
+        if (root.selectedNic)
+            return root.nicInfoOf(root.selectedNic);
+        for (var j = 0; j < root.nicList.length; j++) {
+            if (((root.nicList[j]["ipv4"] || []).length) > 0)
+                return root.nicInfoOf(root.nicList[j]);
+        }
+        return {
+            "ip": "",
+            "mask": "",
+            "gateway": ""
+        };
+    }
+
     // 面板加载完成后回填已保存的参数（没有保存过则保持默认值）
     function restorePanel(panelItem) {
         if (!panelItem)
@@ -387,7 +471,8 @@ Dialog {
                                 id: ipAddrInput
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
-                                value: "192.168.0.123"
+                                // 联动默认值：与设备列表第一台设备同网段的网卡（详见 networkInfo）
+                                value: root.networkInfo["ip"]
                             }
 
                         }
@@ -408,7 +493,8 @@ Dialog {
                                 id: maskInput
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
-                                value: "255.255.255.0"
+                                // 联动默认值：与 IP 地址同源的网卡子网掩码
+                                value: root.networkInfo["mask"]
                             }
 
                         }
@@ -429,7 +515,8 @@ Dialog {
                                 id: gwInput
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
-                                value: "192.168.0.1"
+                                // 联动默认值：与 IP 地址同源的网卡网关
+                                value: root.networkInfo["gateway"]
                             }
 
                         }
@@ -540,7 +627,9 @@ Dialog {
                     highlighted: true
                     text: qsTr("保存")
                     onClicked: {
-                        root.saveCurrentPanel();
+                        root.pendingIp = ipAddrInput.text();
+                        root.showMask = true;
+                        ScreenTools.checkIpOccupiedAsync(root.pendingIp);
                     }
                 }
 
@@ -3331,6 +3420,25 @@ Dialog {
         // 保存成功提示弹窗
         AppMessageBox {
             id: saveTipBox
+        }
+
+        // ===== 网络设置保存前的异步 IP 占用探测结果 =====
+        Connections {
+            target: ScreenTools
+
+            function onSignalIpOccupied(ip, occupied) {
+                if (!root.visible || ip !== root.pendingIp)
+                    return ;
+
+                root.showMask = false;
+                root.pendingIp = "";
+                if (occupied) {
+                    // 目标 IP 已被占用：提示后留在本页继续修改，不保存
+                    saveTipBox.show(qsTr("温馨提示"), qsTr("目标IP地址已被占用, 请输入处于空闲状态的IP地址"));
+                } else {
+                    root.saveCurrentPanel();
+                }
+            }
         }
 
     }

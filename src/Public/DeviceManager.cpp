@@ -343,7 +343,7 @@ void DeviceManager::fetchRtspCredential(const QVariantMap& device)
             result["rtspPassword"] = resultObj.value("key").toString();
             qInfo() << "LOG::fetchRtspCredential parse, ip:" << ip
                     << "user:" << result.value("rtspUserName").toString()
-                    << "keyLen:" << result.value("rtspPassword").toString().size();
+                    << "keyLen:" << result.value("rtspPassword").toString();
         } else {
             qWarning() << "LOG::fetchRtspCredential http failed after retry, ip:" << ip;
         }

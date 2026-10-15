@@ -218,6 +218,21 @@ void RtspVideoItem::setSampleRate(int rate)
     emit sampleRateChanged();
 }
 
+bool RtspVideoItem::mainStream() const
+{
+    return m_mainStream;
+}
+
+void RtspVideoItem::setMainStream(bool main)
+{
+    // 仅记录勾选状态：起流时随 start 传给任务，在播流不因此重连
+    if (m_mainStream == main)
+        return;
+
+    m_mainStream = main;
+    emit mainStreamChanged();
+}
+
 YuvProvider* RtspVideoItem::yuvProvider() const
 {
     return m_frameProvider;
@@ -284,7 +299,7 @@ void RtspVideoItem::restartTask()
     connect(m_task, &RtspLiveTask::playResult, this, &RtspVideoItem::onPlayResult, Qt::QueuedConnection);
 
     setPlayState(1); // 连接中
-    m_task->start(ip, m_userName, m_password, m_sampleRate);
+    m_task->start(ip, m_userName, m_password, m_sampleRate, m_mainStream);
 }
 
 void RtspVideoItem::onPlayResult(int errorCode, const QString& message)
