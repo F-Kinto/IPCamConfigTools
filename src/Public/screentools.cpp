@@ -558,7 +558,7 @@ void ScreenTools::getScreenWidHeight()
         int   height         = screenGeometry.height() * (m_scaleFrac > 25 ? m_scaleInt + 1 : m_scaleInt);
 
         m_screenWidth  = qMin(1344, width);
-        m_screenHeight = qMin(756, height);
+        m_screenHeight = qMin(726, height);
         emit signalScreenWidthChanged();
         emit signalScreenHeightChanged();
         setRectWidthScale();
@@ -586,7 +586,7 @@ void ScreenTools::setRectWidthScale()
 
 void ScreenTools::setRectHeightScale()
 {
-    if (m_screenHeight < 756) {
+    if (m_screenHeight < 726) {
         m_rectHeightScale = std::round(1.05 * 100.0) / 100.0;
     } else {
         m_rectHeightScale = 1.0;

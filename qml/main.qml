@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQuick.Window 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Qt.labs.qmlmodels 1.0
@@ -13,7 +14,6 @@ ApplicationWindow {
     id: root
 
     // 表格列标题（共 8 列，默认可视区域只显示前 6 列，其余需拖动底部水平滚动条）
-    // 顺序与下方 TableModelColumn 一一对应；设备ID（UID）填在“UID”列
     property var tableTitles: [qsTr("IP地址"), qsTr("UID"), qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("设备类型")]
     // 是否允许鼠标拖拽表头分割线调整列宽
     property bool tableResizable: true
@@ -70,7 +70,7 @@ ApplicationWindow {
     }))
     // ===== 页签：直播预览 =====
     // 直播模式开关（两套逻辑二选一）：
-    // false = 多路模式：勾选设备合并进播放列表，最多 maxLiveCount 路同时播放
+    // false = 多路模式：最多 maxLiveCount 路同时播放
     // true  = 单路模式
     property bool singleLiveMode: true
     // 主码流播放（顶部工具栏勾选状态，默认不勾选）：起流 URL 用 ch00_0（主码流）/ ch00_1（子码流）
@@ -505,17 +505,62 @@ ApplicationWindow {
 
     // 勾选的行号一变就同步一次（单个勾选 / 全选 / 反选 / 清空都走这里）
     onSelectedRowsChanged: root.syncCheckedDevices()
-    width: ScreenTools.scaleNum(1200)
-    height: ScreenTools.scaleNum(740)
-    minimumWidth: ScreenTools.scaleNum(900)
-    minimumHeight: ScreenTools.scaleNum(560)
+    width: ScreenTools.scaleNum(ScreenTools.screenWidth) * ScreenTools.rectWidthScale
+    height: ScreenTools.scaleNum(ScreenTools.screenHeight) * ScreenTools.rectHeightScale
+    minimumWidth: ScreenTools.scaleNum(600)
+    minimumHeight: ScreenTools.scaleNum(450)
     visible: true
     title: qsTr("IPC BatchTool_V1.0.0.0")
-    color: "#f0f0f0"
+    color: "transparent"
     font.family: "Microsoft YaHei"
     font.pointSize: ScreenTools.scaleNum(10, true)
+    // 去掉系统默认标题栏，改用自绘 AppTitleBar；
+    flags: Qt.Window | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint
+    // ===== 跨屏拖动适配 =====
+    property real initialWidth: -1
+    property real initialHeight: -1
+    property real lastScreenDpr: -1
+    property real screenDpr: Screen.devicePixelRatio
+
+    onScreenDprChanged: {
+        if (screenDpr < 0)
+            return;
+        if (lastScreenDpr < 0) {
+            // 首次求值：仅记录基准
+            lastScreenDpr = screenDpr;
+            return;
+        }
+        if (screenDpr > 0 && screenDpr !== lastScreenDpr
+                && visibility !== Window.Maximized) {
+            root.fitWindowToScreen();
+            Qt.callLater(root.fitWindowToScreen);
+        }
+        lastScreenDpr = screenDpr;
+    }
+
+    // 跨屏后恢复启动逻辑尺寸（放不下则收缩到新屏可用区），并把窗口拉回屏内
+    function fitWindowToScreen() {
+        if (initialWidth <= 0 || visibility === Window.Maximized)
+            return;
+        var newWidth = Math.min(initialWidth, Screen.desktopAvailableWidth);
+        var newHeight = Math.min(initialHeight, Screen.desktopAvailableHeight);
+        // 以当前左上角为锚收缩/放大，超出新屏的部分拉回屏内
+        var newX = Math.max(Screen.virtualX,
+                            Math.min(x, Screen.virtualX + Screen.width - newWidth));
+        var newY = Math.max(Screen.virtualY,
+                            Math.min(y, Screen.virtualY + Screen.height - newHeight));
+        x = newX;
+        y = newY;
+        width = newWidth;
+        height = newHeight;
+    }
     // 启动时拉取一次网卡列表（并按配置文件自动回显），随后把网卡信息打印到日志
     Component.onCompleted: {
+        // 记录启动逻辑尺寸，作为跨屏恢复的基准
+        if (initialWidth <= 0) {
+            initialWidth = width;
+            initialHeight = height;
+        }
         root.refreshNics();
         root.logNicList();
         // 程序启动自动执行一次设备搜索；延后一个事件循环，等窗口与表格就绪
@@ -577,8 +622,48 @@ ApplicationWindow {
         target: livePreviewPage
     }
 
-    ColumnLayout {
+    // ===== 圆角窗口背景（窗口本体已透明，背景移到这里画） =====
+    Rectangle {
+        id: windowBg
+
         anchors.fill: parent
+        z: 0
+        // 最大化时直角，否则圆角处会透出桌面
+        radius: (visibility === Window.Maximized) ? 0 : ScreenTools.scaleNum(4)
+        color: "#f0f0f0"
+    }
+
+    // ===== 最外层 2px 浅灰描边 =====
+    Rectangle {
+        id: windowBorder
+
+        anchors.fill: parent
+        z: 200
+        radius: (visibility === Window.Maximized) ? 0 : ScreenTools.scaleNum(4)
+        color: "transparent"
+        border.width: 2
+        border.color: "#DCDCDC"
+        // 最大化撑满屏幕时不需要圆角边框
+        visible: visibility !== Window.Maximized
+    }
+
+    // ===== 自绘标题栏（替代系统默认标题栏） =====
+    AppTitleBar {
+        id: appTitleBar
+
+        titleText: root.title
+        win: root
+        z: 100
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+    }
+
+    ColumnLayout {
+        anchors.top: appTitleBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         anchors.margins: ScreenTools.scaleNum(12)
         spacing: ScreenTools.scaleNum(4)
 

@@ -15,6 +15,9 @@
 #include "Public/screentools.h"
 #include "Rtsp/RtspVideoItem.h"
 
+#include <Windows.h>
+#include <shellscalingapi.h>
+
 // 把单例对象注册成 QML 类型（模块 IPCam.Public 1.0）
 template <typename T>
 static void registerSingleton(const char* name)
@@ -28,7 +31,41 @@ static void registerSingleton(const char* name)
         });
 }
 
+// 与 VmsTools 对齐：进程级 Per-Monitor DPI 感知，
+// 否则修改缩放比后启动程序概率获取的是修改之前的 dpi，导致 ui 兼容问题
+void setDPIAwareness()
+{
+    HMODULE hShCore = GetModuleHandleA("shcore.dll");
+
+    // 如果没有加载，则加载它
+    if (!hShCore) {
+        hShCore = LoadLibraryA("shcore.dll");
+        if (!hShCore)
+            return;
+    } else {
+        qDebug() << "shcore.dll already loaded at: 0x" << hShCore;
+    }
+    if (hShCore) {
+        typedef HRESULT(WINAPI * SetProcessDpiAwarenessProc)(PROCESS_DPI_AWARENESS);
+        auto SetProcessDpiAwareness = (SetProcessDpiAwarenessProc)GetProcAddress(hShCore, "SetProcessDpiAwareness");
+
+        if (SetProcessDpiAwareness) {
+            SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+            return;
+        }
+    } else {
+        DWORD err = GetLastError();
+        qDebug() << "LoadLibraryA failed with error: " << err;
+    }
+}
+
 int main(int argc, char* argv[]) {
+    // 与 VmsTools 对齐：DPI 感知 + Qt 高 DPI 缩放，必须在 QGuiApplication 构造前设置
+    setDPIAwareness();
+    QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QGuiApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    QGuiApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+
     QGuiApplication app(argc, argv);
     app.setOrganizationName("IPCamConfigTools");
     app.setApplicationName("IPC BatchTool");

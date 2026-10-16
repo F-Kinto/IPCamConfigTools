@@ -26,5 +26,7 @@
         <file>Controls/BatchProgressMask.qml</file>
         <file>Controls/BatchResultDialog.qml</file>
         <file>Controls/DeviceTable.qml</file>
+        <file>Controls/AppTitleBar.qml</file>
+        <file>image/appIcon.png</file>
     </qresource>
 </RCC>
