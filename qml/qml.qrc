@@ -23,6 +23,8 @@
         <file>Controls/AppMenuItem.qml</file>
         <file>Controls/AppSpinner.qml</file>
         <file>Controls/AppToast.qml</file>
+        <file>Controls/BatchProgressMask.qml</file>
+        <file>Controls/BatchResultDialog.qml</file>
         <file>Controls/DeviceTable.qml</file>
     </qresource>
 </RCC>

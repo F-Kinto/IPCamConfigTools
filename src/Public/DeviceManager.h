@@ -28,7 +28,6 @@ struct DeviceInfo {
     QString uid;            /**< 设备唯一标识（DeviceUID）；为空时由 mac / ip 兜底做 key */
     QString ip;             /**< IP 地址 */
     QString mac;            /**< 物理地址 */
-    QString cloudId;        /**< UID（表格里显示的就是 DeviceUID） */
     QString deviceType;     /**< 设备类型（产品名） */
     QString currentVersion; /**< 升级当前版本号 */
     QString targetVersion;  /**< 升级后版本号 */
@@ -54,7 +53,6 @@ struct DeviceInfo {
         map["uid"]            = uid;
         map["ip"]             = ip;
         map["mac"]            = mac;
-        map["cloudId"]        = cloudId;
         map["deviceType"]     = deviceType;
         map["currentVersion"] = currentVersion;
         map["targetVersion"]  = targetVersion;
@@ -75,7 +73,6 @@ struct DeviceInfo {
         info.uid            = map.value("uid").toString();
         info.ip             = map.value("ip").toString();
         info.mac            = map.value("mac").toString();
-        info.cloudId        = map.value("cloudId").toString();
         info.deviceType     = map.value("deviceType").toString();
         info.currentVersion = map.value("currentVersion").toString();
         info.targetVersion  = map.value("targetVersion").toString();
@@ -85,9 +82,6 @@ struct DeviceInfo {
         info.systemModel    = map.value("systemModel").toString();
         info.rtspUserName   = map.value("rtspUserName").toString();
         info.rtspPassword   = map.value("rtspPassword").toString();
-        // 表格里的“UID”列就是 uid，个别设备 uid 为空时用它兜底
-        if (info.uid.isEmpty())
-            info.uid = info.cloudId;
 
         return info;
     }
@@ -184,7 +178,7 @@ class DeviceManager : public QObject {
     Q_INVOKABLE void clearCurrentDevice();
 
     /**
-     * @brief 取设备 key：uid 优先，为空时依次用 cloudId、mac、ip 兜底
+     * @brief 取设备 key：uid 优先，为空时依次用 mac、ip 兜底
      */
     Q_INVOKABLE QString keyOf(const QVariantMap& device) const;
 

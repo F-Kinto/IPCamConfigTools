@@ -188,8 +188,6 @@ QString DeviceManager::keyOf(const QVariantMap& device) const
 {
     QString key = device.value("uid").toString();
     if (key.isEmpty())
-        key = device.value("cloudId").toString();
-    if (key.isEmpty())
         key = device.value("mac").toString();
     if (key.isEmpty())
         key = device.value("ip").toString();

@@ -163,6 +163,116 @@ Dialog {
         root.checkedMap = m;
     }
 
+    // ===== "执行修改（配置其他参数）"：按勾选子节点构造下发序列 =====
+    // 子节点 key -> 动作名（遮罩进度提示用），与 GlobalEnum DeviceSetUrl 枚举一一对应
+    function batchActionName(key) {
+        var map = {
+            "network": qsTr("以太网"),
+            "gb28181": qsTr("28181接入"),
+            "videoCapture": qsTr("视频采集"),
+            "timeTitle": "OSD",
+            "videoEncode": qsTr("视频编码"),
+            "audioEncode": qsTr("音频编码"),
+            "audioReconfig": qsTr("音量配置"),
+            "motionDetect": qsTr("移动侦测"),
+            "audioDetect": qsTr("声音侦测"),
+            "account": qsTr("账号"),
+            "clock": qsTr("时钟"),
+            "maintenance": qsTr("定期维护"),
+            "language": qsTr("设备语言")
+        };
+        return map[key] || key;
+    }
+
+    // 子节点 key -> 设备设置接口 URL 模板（含 %1 设备 IP 占位）
+    // 枚举值须与 GlobalEnum.h 的 DeviceSetUrl 保持一致
+    function batchUrl(key) {
+        var cmdMap = {
+            "network": 0,
+            "gb28181": 1,
+            "videoCapture": 2,
+            "timeTitle": 3,
+            "videoEncode": 4,
+            "audioEncode": 5,
+            "audioReconfig": 6,
+            "motionDetect": 7,
+            "audioDetect": 8,
+            "account": 9,
+            "clock": 10,
+            "maintenance": 11,
+            "language": 12
+        };
+        return ConfigureManager.getDeviceSetUrl(cmdMap[key] === undefined ? -1 : cmdMap[key]);
+    }
+
+    // 按 groups 顺序收集勾选的子节点，构造下发给 BatchSettingsTask 的设置项序列：
+    // [{key, name, action, url, body}]
+    // - body 取面板已保存参数（savedPanelValues 序列化为 JSON），没保存过则为空串（发 GET）
+    function buildBatchItems() {
+        var items = [];
+        for (var g = 0; g < root.groups.length; g++) {
+            var list = root.groups[g].items;
+            for (var i = 0; i < list.length; i++) {
+                var key = list[i].key;
+                if (!root.isChecked(key))
+                    continue;
+
+                var url = root.batchUrl(key);
+                if (url === "")
+                    continue;
+
+                var saved = root.savedPanelValues[key];
+                items.push({
+                    "key": key,
+                    "name": list[i].name,
+                    "action": root.batchActionName(key),
+                    "url": url,
+                    "body": saved === undefined ? "" : JSON.stringify(saved)
+                });
+            }
+        }
+        return items;
+    }
+
+    // 已保存的网络设置 IP 地址
+    // savedPanelValues["network"] 是 collectValues 按控件声明顺序收集的
+    // {path: {k, v}} 表，第一个 k==="ip" 的控件即"IP地址"输入框
+    // （其后依次为子网掩码、网关），故取首个 ip 记录即可
+    function networkSavedIp() {
+        var saved = root.savedPanelValues["network"];
+        if (saved === undefined)
+            return "";
+        for (var path in saved) {
+            var rec = saved[path];
+            if (rec !== undefined && rec.k === "ip")
+                return rec.v;
+        }
+        return "";
+    }
+
+    // 生成把"IP地址"替换为 newIp 的网络设置请求体（批量多台各分配一个
+    // 空闲 IP 时逐台构造）；没保存过面板参数返回空串
+    function networkBodyWithIp(newIp) {
+        var saved = root.savedPanelValues["network"];
+        if (saved === undefined)
+            return "";
+        var m = ({});
+        var replaced = false;
+        for (var path in saved) {
+            var rec = saved[path];
+            if (!replaced && rec !== undefined && rec.k === "ip") {
+                m[path] = {
+                    "k": rec.k,
+                    "v": newIp
+                };
+                replaced = true;
+            } else {
+                m[path] = rec;
+            }
+        }
+        return JSON.stringify(m);
+    }
+
     function persistedKind(obj) {
         // 密码框不持久化
         if (obj.echoMode !== undefined && obj.echoMode === TextInput.Password)

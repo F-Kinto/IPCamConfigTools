@@ -6,6 +6,7 @@
 #include <QUrl>
 
 #include "Public/AppLogger.h"
+#include "Public/BatchSettingsTask.h"
 #include "Public/ConfigureManager.h"
 #include "Public/DeviceApiClient.h"
 #include "Public/DeviceManager.h"
@@ -50,6 +51,8 @@ int main(int argc, char* argv[]) {
     registerSingleton<DeviceManager>("DeviceManager");
     // 通用异步 HTTP 调用封装（处理链同 VmsTools queryRequestV5：组包 -> AsynRequest -> 按 customMessage 分发响应）
     registerSingleton<DeviceApiClient>("DeviceApiClient");
+    // 批量下发"配置其他参数"：设备间并行、设备内串行、失败 2 秒重试
+    registerSingleton<BatchSettingsTask>("BatchSettingsTask");
 
     // RTSP 直播渲染组件（模块 IPCam.Rtsp 1.0）：device 赋值自动拉流，
     // 内部走 Live555 收流 + FFmpeg 解码（同步自 VmsTools，固定 RTSP 单路）

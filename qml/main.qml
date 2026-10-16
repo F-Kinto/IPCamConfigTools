@@ -186,6 +186,21 @@ ApplicationWindow {
         DeviceManager.syncCheckedDevices(list);
     }
 
+    // 批量设置网络成功后：设备已切到设置的 IP，设备列表 IP 栏与勾选数据同步更新
+    // （keyOf 口径与“执行修改”一致：uid -> mac -> ip）
+    function updateDeviceIp(deviceKey, newIp) {
+        for (var i = 0; i < deviceModel.rowCount; i++) {
+            var dev = deviceModel.getRow(i);
+            if (DeviceManager.keyOf(dev) !== deviceKey)
+                continue;
+            dev.ip = newIp;
+            deviceModel.setRow(i, dev); // 替换该行数据，触发列表 IP 栏刷新
+            // 勾选集合里该设备的信息覆盖更新（uid 相同直接覆盖，勾选数不变）
+            DeviceManager.setCheckedDevice(dev);
+            return ;
+        }
+    }
+
     // 当前选中（浅蓝高亮）的那一条单独保存一份，供单台操作取用
     function syncCurrentDevice() {
         var row = deviceTable.currentRow;
@@ -810,7 +825,7 @@ ApplicationWindow {
                                 // 双击
                                 onRowDoubleClicked: root.openLivePreviewOfRow(row)
                                 // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
-                                columnRoles: ["ip", "cloudId", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
+                                columnRoles: ["ip", "uid", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
                                 // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
                                 onRowsReordered: {
                                     root.remapSelectedRows(indexMap);
@@ -827,7 +842,7 @@ ApplicationWindow {
                                     }
 
                                     TableModelColumn {
-                                        display: "cloudId"
+                                        display: "uid"
                                     }
 
                                     TableModelColumn {
@@ -925,6 +940,10 @@ ApplicationWindow {
                     deviceCount: deviceModel.rowCount
                     onSearchRequested: root.searchDevices()
                     onLivePreviewRequested: root.openLivePreview()
+                    // 批量下发其他参数全部完成：弹出结果详情弹窗
+                    onBatchAllFinished: batchResultDialog.open()
+                    // 网络设置成功后设备已切新 IP：更新设备列表 IP 栏并同步勾选数据
+                    onDeviceIpChanged: root.updateDeviceIp(deviceKey, newIp)
                 }
 
             }
@@ -1387,6 +1406,20 @@ ApplicationWindow {
         z: 100
         busy: commandPanel.ipAllocating
         text: qsTr("正在分配空闲IP...")
+    }
+
+    // ===== 批量下发其他参数进度遮罩（设备内串行、设备间并行）=====
+    BatchProgressMask {
+        anchors.fill: parent
+        z: 100
+        busy: commandPanel.batchRunning
+        rows: commandPanel.batchRows
+    }
+
+    // ===== 批量下发其他参数结果详情弹窗（全部请求完成后弹出）=====
+    BatchResultDialog {
+        id: batchResultDialog
+        rows: commandPanel.batchRows
     }
 
     // ===== 退出程序等待定时器 =====

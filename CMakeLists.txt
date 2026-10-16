@@ -17,6 +17,8 @@ set(PUBLIC_SOURCES
     src/Public/screentools.cpp
     src/Public/ConfigureManager.h
     src/Public/ConfigureManager.cpp
+    src/Public/BatchSettingsTask.h
+    src/Public/BatchSettingsTask.cpp
     src/Public/TranslatorManager.h
     src/Public/TranslatorManager.cpp
     src/Public/AppLogger.h

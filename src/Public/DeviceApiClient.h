@@ -51,9 +51,9 @@ class COMMON_EXPORT DeviceApiClient : public QObject {
      *
      * 说明：QML 不识别 C++ 默认参数（调用参数个数必须与声明匹配），
      * 因此每个入口提供"省略 intervalMs"与"显式 intervalMs"两个重载，
-     * 省略版内部转调本常量，保证 QML/C++ 两侧缺省均为 10 秒。
+     * 省略版内部转调本常量，保证 QML/C++ 两侧缺省均为 5 秒。
      */
-    static const int kDefaultIntervalMs = 10 * 1000;
+    static const int kDefaultIntervalMs = 5 * 1000;
 
     /**
      * @brief 异步 GET 请求（超时缺省 10 秒）
