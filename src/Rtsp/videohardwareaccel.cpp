@@ -23,6 +23,8 @@ extern "C" {
 #include "libswscale/swscale.h"
 }
 
+#include <QOperatingSystemVersion>
+
 #include <atomic>
 #include <mutex>
 
@@ -206,6 +208,16 @@ bool VideoHardwareAccel::init(AVCodec* codec, bool isH265)
     m_isH265   = isH265;
     m_enabled  = false;
     m_hwPixFmt = AV_PIX_FMT_NONE;
+
+    // Win7 及以下整体禁用硬件解码，直接回退软解。
+    // 实测仅跳过 D3D11VA 不够：显卡驱动异常/老驱动的 Win7 机器上，DXVA2
+    // （D3D9 + DXVA2 服务）与 QSV（内部还会派生 D3D11/DXVA2 子设备）的
+    // 设备创建同样可能触发驱动层崩溃；本工具最多 4 路预览，软解足以胜任，
+    // 干脆不触碰图形栈，彻底规避此类崩溃。
+    if (QOperatingSystemVersion::current() < QOperatingSystemVersion::Windows8) {
+        qDebug() << "[VideoHardwareAccel] Win7 系统禁用硬件解码，回退软件解码";
+        return false;
+    }
 
     // 探测优先级：D3D11VA（全厂商，Win8+）> DXVA2（全厂商，Win7+）> QSV（仅 Intel）
     AVHWDeviceType candidates[] = {AV_HWDEVICE_TYPE_D3D11VA, AV_HWDEVICE_TYPE_DXVA2, AV_HWDEVICE_TYPE_QSV};

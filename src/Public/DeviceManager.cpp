@@ -320,7 +320,7 @@ void DeviceManager::fetchRtspCredential(const QVariantMap& device)
 
             recvData = questObj.recvData();
             qInfo() << "LOG::fetchRtspCredential request attempt:" << attempt
-                    << "url:" << url << "replySize:" << recvData.size();
+                    << "url:" << url;
             if (!recvData.isEmpty()) {
                 requestOk = true;
                 break;

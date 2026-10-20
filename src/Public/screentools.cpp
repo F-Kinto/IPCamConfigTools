@@ -98,7 +98,7 @@ static QMap<quint32, AdapterInfo> queryAdapterInfos()
  *  2) 隧道适配器 IF_TYPE_TUNNEL(131)：Teredo / 6to4 / ISATAP / IP-HTTPS
  *  3) 没有物理地址（MAC）的虚拟接口：Hyper-V vSwitch、Wi-Fi Direct 虚拟适配器等
  *     （已连接的 PPP/VPN 例外，ipconfig 会显示它们）
- *  4) 名称含"本地连接"的隐藏/虚拟连接（按需求隐藏）
+ *  4) 名称含"本地连接*"的无线承载网络虚拟适配器（按需求隐藏；注意 Win7 物理网卡名为"本地连接"无星号，不可误杀）
  *
  * @param iface 待判断的网卡
  * @param info  该网卡的附加信息（接口类型等）
@@ -123,11 +123,12 @@ static bool isIpconfigVisible(const QNetworkInterface& iface, const AdapterInfo&
             return false;
     }
 
-    // 4) 名称含"本地连接"的连接不加入列表（英文系统为 Local Area Connection）
-    //    包括 ipconfig 中显示为"无线局域网适配器 本地连接* N"的无线承载网络虚拟适配器
+    // 4) 名称含"本地连接*"的无线承载网络虚拟适配器不加入列表（英文为 Local Area Connection*）
+    //    注意必须带 * 号匹配：Win7 物理网卡的 FriendlyName 就是"本地连接"（无星号，Win10/11 为"以太网"），
+    //    若按裸"本地连接"过滤会把 Win7 上所有物理网卡全部误隐藏，导致扫描不到本地 IP。
     const QString readableName = iface.humanReadableName();
-    if (readableName.contains(QStringLiteral("本地连接"), Qt::CaseInsensitive)
-     || readableName.contains(QStringLiteral("Local Area Connection"), Qt::CaseInsensitive))
+    if (readableName.contains(QStringLiteral("本地连接*"), Qt::CaseInsensitive)
+     || readableName.contains(QStringLiteral("Local Area Connection*"), Qt::CaseInsensitive))
         return false;
 
     return true;
