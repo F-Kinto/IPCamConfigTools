@@ -1436,18 +1436,6 @@ ApplicationWindow {
         text: qsTr("正在查询IP占用状态...")
     }
 
-    // ===== 其它设置弹窗的探测遮罩 =====
-    // 网络设置面板点“保存”后异步探测 IP 占用期间，盖住整个弹窗（含标题栏与关闭按钮）并吞掉鼠标事件。
-    AppBusyMask {
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: otherSettingsDialog.width
-        height: otherSettingsDialog.height
-        z: 1000
-        busy: otherSettingsDialog.showMask && otherSettingsDialog.visible
-        text: qsTr("正在查询IP占用状态...")
-    }
-
     // ===== OSD参数共享存储：“OSD修改”弹窗 与 “其它设置-OSD设置”页共用同一份已保存参数 =====
     QtObject {
         id: osdConfig

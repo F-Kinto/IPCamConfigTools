@@ -34,10 +34,6 @@ Dialog {
     property var selectedNic: null
     // 设备列表第一台设备的 IP；列表为空时为空串
     property string firstDeviceIp: ""
-    // 网络设置保存前异步探测占用期间：遮罩显隐（供 main.qml 里挂在 Overlay 层的 AppBusyMask 绑定）
-    property bool showMask: false
-    // 正在异步探测占用的 IP：请求/响应用它匹配，防止过期响应串扰
-    property string pendingIp: ""
     // 分类树数据：key 用于右侧面板路由
     readonly property var groups: [{
         "name": qsTr("网络参数"),
@@ -248,29 +244,6 @@ Dialog {
                 return rec.v;
         }
         return "";
-    }
-
-    // 生成把"IP地址"替换为 newIp 的网络设置请求体（批量多台各分配一个
-    // 空闲 IP 时逐台构造）；没保存过面板参数返回空串
-    function networkBodyWithIp(newIp) {
-        var saved = root.savedPanelValues["network"];
-        if (saved === undefined)
-            return "";
-        var m = ({});
-        var replaced = false;
-        for (var path in saved) {
-            var rec = saved[path];
-            if (!replaced && rec !== undefined && rec.k === "ip") {
-                m[path] = {
-                    "k": rec.k,
-                    "v": newIp
-                };
-                replaced = true;
-            } else {
-                m[path] = rec;
-            }
-        }
-        return JSON.stringify(m);
     }
 
     function persistedKind(obj) {
@@ -737,9 +710,7 @@ Dialog {
                     highlighted: true
                     text: qsTr("保存")
                     onClicked: {
-                        root.pendingIp = ipAddrInput.text();
-                        root.showMask = true;
-                        ScreenTools.checkIpOccupiedAsync(root.pendingIp);
+                        root.saveCurrentPanel();
                     }
                 }
 
@@ -1620,6 +1591,27 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
+                                text: qsTr("背光(0-255)")
+                            }
+
+                            AppTextField {
+                                id: vcBacklightInput
+
+                                Layout.preferredWidth: ScreenTools.scaleNum(200)
+                                text: "128"
+                            }
+
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: ScreenTools.scaleNum(8)
+
+                            Label {
+                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredHeight: root.ctrlH
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignRight
                                 text: qsTr("白平衡")
                             }
 
@@ -1760,6 +1752,7 @@ Dialog {
                         vcSaturationInput.text = "128";
                         vcSharpnessInput.text = "128";
                         vcContrastInput.text = "128";
+                        vcBacklightInput.text = "128";
                         vcWhiteBalanceCombo.currentIndex = 0;
                         vcHFlipCombo.currentIndex = 0;
                         vcVFlipCombo.currentIndex = 0;
@@ -3530,25 +3523,6 @@ Dialog {
         // 保存成功提示弹窗
         AppMessageBox {
             id: saveTipBox
-        }
-
-        // ===== 网络设置保存前的异步 IP 占用探测结果 =====
-        Connections {
-            target: ScreenTools
-
-            function onSignalIpOccupied(ip, occupied) {
-                if (!root.visible || ip !== root.pendingIp)
-                    return ;
-
-                root.showMask = false;
-                root.pendingIp = "";
-                if (occupied) {
-                    // 目标 IP 已被占用：提示后留在本页继续修改，不保存
-                    saveTipBox.show(qsTr("温馨提示"), qsTr("目标IP地址已被占用, 请输入处于空闲状态的IP地址"));
-                } else {
-                    root.saveCurrentPanel();
-                }
-            }
         }
 
     }

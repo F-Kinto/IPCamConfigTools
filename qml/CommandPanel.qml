@@ -40,13 +40,6 @@ ColumnLayout {
     property bool batchRunning: false
     // 每设备一块：[{key, header, status, items: [{name, ok}]}]
     property var batchRows: []
-    // 勾选了网络设置且多台设备：先异步凑等量空闲 IP 再下发
-    property bool batchAllocating: false
-    // 本次分配请求的起始 IP（网络面板已保存的 IP）
-    property string batchAllocBaseIp: ""
-    // 分配期间的暂存：凑齐空闲 IP 后按设备构造专属设置项再启动下发
-    property var batchAllocDevs: []
-    property var batchAllocItems: []
     // 设备 -> 本次设置的目标 IP（多台为分配的空闲 IP，单台为网络面板保存的 IP）；
     // 网络设置成功后据此上报 main.qml 更新设备列表
     property var batchNewIps: ({})
@@ -174,25 +167,8 @@ ColumnLayout {
                 panel.batchNewIps[devs[k]["uid"]] = networkIp;
         }
 
-        // 多台 + 网络设置：先凑等量空闲 IP（逻辑同“执行修改（设定IP）”多台分支），
-        if (hasNetwork && devs.length > 1) {
-            if (networkIp === "") {
-                confirmBox.showTip(qsTr("温馨提示"), qsTr("请先在[配置其他参数-网络设置]中设置并保存IP地址"));
-                return ;
-            }
-            for (var m = 0; m < rows.length; m++)
-                rows[m].status = qsTr("正在设置...");
-            panel.batchAllocDevs = devs;
-            panel.batchAllocItems = items;
-            panel.batchAllocBaseIp = networkIp;
-            panel.batchAllocating = true;
-            panel.batchRows = rows;
-            panel.batchRunning = true;
-            ScreenTools.findFreeIpsAsync(networkIp, devs.length);
-            return ;
-        }
-
-        // 单台 + 网络设置：给 network 项补 newIp（面板保存的 IP）——该项成功后设备
+        // 网络设置：给 network 项补 newIp（面板保存的 IP）——该项成功后设备切到
+        // 新 IP，调度器把该设备后续项 URL 切到新 IP；多台时各设备共用面板保存的同一 IP
         if (hasNetwork && networkIp !== "") {
             var withNewIp = [];
             for (var n = 0; n < items.length; n++) {
@@ -214,40 +190,6 @@ ColumnLayout {
 
         panel.batchRows = rows;
         panel.batchRunning = true;
-        BatchSettingsTask.start(devs, items);
-    }
-
-    // 空闲 IP 凑齐后启动批量下发：每台设备配一个 IP，网络设置项的请求体按分配
-    // 的 IP 定制（newIp 一并下发，调度器在该项成功后把该设备后续项 URL 切到新 IP）
-    function startBatchWithFreeIps(freeIps) {
-        var devs = [];
-        for (var i = 0; i < panel.batchAllocDevs.length; i++) {
-            var newIp = freeIps[i];
-            panel.batchNewIps[panel.batchAllocDevs[i]["uid"]] = newIp;
-            var devItems = [];
-            for (var j = 0; j < panel.batchAllocItems.length; j++) {
-                var it = panel.batchAllocItems[j];
-                if (it["key"] === "network") {
-                    it = {
-                        "key": it["key"],
-                        "name": it["name"],
-                        "action": it["action"],
-                        "url": it["url"],
-                        "body": otherSettingsDialog.networkBodyWithIp(newIp),
-                        "newIp": newIp
-                    };
-                }
-                devItems.push(it);
-            }
-            devs.push({
-                "uid": panel.batchAllocDevs[i]["uid"],
-                "ip": panel.batchAllocDevs[i]["ip"],
-                "items": devItems
-            });
-        }
-        var items = panel.batchAllocItems;
-        panel.batchAllocDevs = [];
-        panel.batchAllocItems = [];
         BatchSettingsTask.start(devs, items);
     }
 
@@ -347,21 +289,6 @@ ColumnLayout {
                 confirmBox.showTip(qsTr("温馨提示"), qsTr("批量修改IP请求已发送, 请等待设备响应"));
                 return ;
             }
-
-            // “执行修改（配置其他参数）”含网络设置多台的分配结果：凑齐后下发
-            if (!panel.batchAllocating || baseIp !== panel.batchAllocBaseIp)
-                return ;
-
-            panel.batchAllocating = false;
-            panel.batchAllocBaseIp = "";
-            if (freeIps.length < wanted) {
-                // 空闲 IP 不够：关遮罩提示后中断，可调整网络面板 IP 重试
-                panel.batchRunning = false;
-                panel.batchNewIps = ({});
-                confirmBox.showTip(qsTr("温馨提示"), qsTr("网段内空闲IP不足(需%1个, 只找到%2个), 请调整网络设置中的IP地址").arg(wanted).arg(freeIps.length));
-                return ;
-            }
-            panel.startBatchWithFreeIps(freeIps);
         }
 
         target: ScreenTools
