@@ -90,12 +90,290 @@ Dialog {
     // 各设置页的勾选状态（key -> bool）；父节点勾选时批量设置整个分组
     property var checkedMap: ({
     })
-    // 与“OSD修改”弹窗共用的 OSD 参数（由 main.qml 注入），OSD设置页不走下面的面板内存储
+    // 与“OSD修改”弹窗共用的 OSD 参数（由 main.qml 注入）：本页保存走 savedPanelValues 写 other_settings.json
+    // 的 osd 条目，弹窗保存经 osdSavedFromDialog 信号回写同一条目；启动读回后由 syncSharedOsdFromStore 同步进来
     property QtObject sharedOsd: null
     // ===== 参数持久化：只有点面板上的“保存”才提交；关闭窗口/切换页面丢弃未保存的修改 =====
-    // 结构：savedPanelValues[面板 key][控件在面板内的路径] = { k: 类型, v: 值 }
+    // 结构：savedPanelValues[面板 key][控件 objectName] = { k: 类型, v: 值 }
     property var savedPanelValues: ({
     })
+    // 同步收集的控件可读名（写 other_settings.json 时附在条目上便于人工辨识，恢复时忽略）
+    property var savedPanelNames: ({})
+
+    // 设备协议字段映射（覆盖除 language 外的全部面板；language 无设备协议，走旧格式）：
+    // - cmd：面板对应的协议命令名（other_settings.json 顶层键与下发 body 外层标识）；
+    //   命令名未提供的面板暂用面板 key 占位（gb28181/videoCapture/osd/videoEncode/audioEncode/
+    //   audioReconfig/motionDetect/audioDetect/account/maintenance），固件确认后改此一处即可
+    // - fixed：无控件对应的固定字段（协议要求但面板无控件，按默认值发：字符串 ""、数字 0）
+    // - fields：控件 objectName -> {"f": 协议字段路径, "k": 控件类型}，可选 vals/num/if：
+    //   - f 支持 "a/b" 嵌套路径（组 payload 时按路径逐层嵌套，如 mainStream/encodeType）
+    //   - k 供读回时还原运行结构（ip=IpInput.text()、currentIndex=下拉、checked=勾选、text=文本、time=时间）
+    //   - vals：下拉选项值映射（UI 选项 index -> 协议值；[启用,禁用]类 UI 顺序与协议 1/0 相反时必配）
+    //   - num：文本值数字化（parseInt 后进 payload，如端口/音量；IP 与密码仍为字符串）
+    //   - if：条件字段 {c: 条件控件 objectName, v: 期望值}，仅当条件控件保存值为 v 时进 payload
+    //     （如时钟 NTP 字段仅 timeMode=1 时发、手动字段仅 timeMode=2 时发）
+    // 有映射的面板：文件与下发 body 均按协议格式 {"switch": "checked"/"none", "payload": {协议字段: 控件值}}
+    // 无映射的面板（language）：沿用旧格式（键=objectName 的 {k, v, name, p} 表）；两种格式读写自动兼容
+    property var protocolMaps: {
+        "network": {
+            "cmd": "netInfo",
+            "fields": {
+                "ipAddrInput": {"f": "ip", "k": "ip"},
+                "maskInput": {"f": "netmask", "k": "ip"},
+                "gwInput": {"f": "gateway", "k": "ip"},
+                "dns1Input": {"f": "dns", "k": "ip"},
+                "dns2Input": {"f": "dns1", "k": "ip"},
+                "dhcpCombo": {"f": "dhcp", "k": "currentIndex"},
+                "mtuInput": {"f": "mtu", "k": "text", "num": true}
+            }
+        },
+        "gb28181": {
+            "cmd": "gb28181",
+            "fixed": {
+                "sipagreement": "",
+                "registerstate": "",
+                "videochannelencodingid": "",
+                "numbervideochannels": 0
+            },
+            "fields": {
+                "gbEnableCombo": {"f": "enable", "k": "currentIndex"},
+                "localSipPortInput": {"f": "localsipport", "k": "text", "num": true},
+                "sipServerIdInput": {"f": "serversipid", "k": "text"},
+                "sipServerDomainInput": {"f": "serversipdomain", "k": "text"},
+                "sipServerIpInput": {"f": "serversipip", "k": "text"},
+                "sipServerPortInput": {"f": "serversipport", "k": "text", "num": true},
+                "sipUserInput": {"f": "sipusername", "k": "text"},
+                "sipAuthIdInput": {"f": "sipuserid", "k": "text"},
+                "passwordInput": {"f": "userpassword", "k": "text"},
+                "confirmPasswordInput": {"f": "passwordconfirmation", "k": "text"},
+                "alarmIdInput": {"f": "sn", "k": "text"},
+                "registerExpireInput": {"f": "registerperiodvalidity", "k": "text", "num": true},
+                "heartbeatInput": {"f": "heartbeatcycle", "k": "text", "num": true},
+                "heartbeatTimeoutInput": {"f": "maximumheartbeattimeout", "k": "text", "num": true},
+                "streamIndexCombo": {"f": "streamType", "k": "currentIndex"}
+            }
+        },
+        "videoCapture": {
+            "cmd": "videoCapture",
+            "fields": {
+                "vcBrightnessInput": {"f": "brightness", "k": "text", "num": true},
+                "vcSaturationInput": {"f": "saturation", "k": "text", "num": true},
+                "vcSharpnessInput": {"f": "sharpness", "k": "text", "num": true},
+                "vcContrastInput": {"f": "contrast", "k": "text", "num": true},
+                "vcBacklightInput": {"f": "backlight", "k": "text", "num": true},
+                "vcWhiteBalanceCombo": {"f": "whiteBalance", "k": "currentIndex", "vals": ["auto"]},
+                "vcHFlipCombo": {"f": "hFlip", "k": "currentIndex"},
+                "vcVFlipCombo": {"f": "vFlip", "k": "currentIndex"},
+                "vcWdrCombo": {"f": "wdr", "k": "currentIndex"}
+            }
+        },
+        "timeTitle": {
+            "cmd": "osd",
+            "fields": {
+                "osdEnableCombo": {"f": "osdEnable", "k": "currentIndex", "vals": [1, 0]},
+                "osdOverlayCombo": {"f": "extraInfo", "k": "currentIndex"},
+                "osdShowWeekCheck": {"f": "showWeekDay", "k": "checked"},
+                "osdTimePosCombo": {"f": "timePos", "k": "currentIndex"},
+                "osdTimeFormatCombo": {"f": "timeFormat", "k": "currentIndex"},
+                "osdTimeShowPosCombo": {"f": "titleTextPos", "k": "currentIndex"},
+                "osdTitleInput": {"f": "titleContent", "k": "text"}
+            }
+        },
+        "videoEncode": {
+            "cmd": "videoEncode",
+            "fields": {
+                "veMainCodecCombo": {"f": "mainStream/encodeType", "k": "currentIndex", "vals": [1, 0]},
+                "veSubCodecCombo": {"f": "subStream/encodeType", "k": "currentIndex", "vals": [1, 0]},
+                "veMainResCombo": {"f": "mainStream/resolution", "k": "currentIndex"},
+                "veSubResCombo": {"f": "subStream/resolution", "k": "currentIndex"},
+                "veMainRateCtlCombo": {"f": "mainStream/bitrateMode", "k": "currentIndex"},
+                "veSubRateCtlCombo": {"f": "subStream/bitrateMode", "k": "currentIndex"},
+                "veMainGopInput": {"f": "mainStream/iFrameInterval", "k": "text", "num": true},
+                "veSubGopInput": {"f": "subStream/iFrameInterval", "k": "text", "num": true},
+                "veMainBitrateInput": {"f": "mainStream/bitrate", "k": "text", "num": true},
+                "veSubBitrateInput": {"f": "subStream/bitrate", "k": "text", "num": true},
+                "veMainFpsCombo": {"f": "mainStream/fps", "k": "currentIndex", "vals": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]},
+                "veSubFpsCombo": {"f": "subStream/fps", "k": "currentIndex", "vals": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}
+            }
+        },
+        "audioEncode": {
+            "cmd": "audioEncode",
+            "fields": {
+                "aeEnableCombo": {"f": "enable", "k": "currentIndex", "vals": [1, 0]},
+                "aeTypeCombo": {"f": "encodeType", "k": "currentIndex", "vals": ["G711", "AAC"]},
+                "aeSampleCombo": {"f": "sampleRate", "k": "currentIndex", "vals": [8000, 16000]},
+                "aeBitrateInput": {"f": "bitrate", "k": "text", "num": true}
+            }
+        },
+        "audioReconfig": {
+            "cmd": "audioReconfig",
+            "fields": {
+                "arCaptureInput": {"f": "captureVolume", "k": "text", "num": true},
+                "arPlayInput": {"f": "playVolume", "k": "text", "num": true}
+            }
+        },
+        "motionDetect": {
+            "cmd": "motionDetect",
+            "fields": {
+                "mdEnableCombo": {"f": "enable", "k": "currentIndex", "vals": [1, 0]}
+            }
+        },
+        "audioDetect": {
+            "cmd": "audioDetect",
+            "fields": {
+                "adEnableCombo": {"f": "enable", "k": "currentIndex", "vals": [1, 0]}
+            }
+        },
+        "account": {
+            "cmd": "account",
+            "fixed": {
+                "username": "admin"
+            },
+            "fields": {
+                "accNewPwdInput": {"f": "password", "k": "text"}
+            }
+        },
+        "clock": {
+            "cmd": "setTimeAttr",
+            "fields": {
+                "ckModeCombo": {"f": "timeMode", "k": "currentIndex"},
+                "ckZoneCombo": {"f": "timezone", "k": "currentIndex", "vals": ["GMT-12:00", "GMT-11:00", "GMT-10:00", "GMT-09:00", "GMT-08:00", "GMT-07:00", "GMT-06:00", "GMT-05:00", "GMT-04:00", "GMT-03:00", "GMT-02:00", "GMT-01:00", "GMT+00:00", "GMT+01:00", "GMT+02:00", "GMT+03:00", "GMT+04:00", "GMT+05:00", "GMT+06:00", "GMT+07:00", "GMT+08:00", "GMT+09:00", "GMT+10:00", "GMT+11:00", "GMT+12:00"]},
+                "ckNtpIpInput": {"f": "ntpServer", "k": "text", "if": {"c": "ckModeCombo", "v": 1}},
+                "ckNtpPortInput": {"f": "ntpPort", "k": "text", "num": true, "if": {"c": "ckModeCombo", "v": 1}},
+                "ckRefreshInput": {"f": "ntpInterval", "k": "text", "num": true, "if": {"c": "ckModeCombo", "v": 1}},
+                "ckTimeInput": {"f": "manualTime", "k": "text", "if": {"c": "ckModeCombo", "v": 2}},
+                "ckSetTimeCheck": {"f": "manualSetTimeEnable", "k": "checked", "if": {"c": "ckModeCombo", "v": 2}},
+                "ckDstEnableCombo": {"f": "dstEnable", "k": "currentIndex", "vals": [1, 0]},
+                "ckDstStartMonthCombo": {"f": "dstStart/month", "k": "currentIndex", "vals": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
+                "ckDstStartWeekSeqCombo": {"f": "dstStart/weekOrder", "k": "currentIndex", "vals": [1, 2, 3, 4, 5]},
+                "ckDstStartWeekDayCombo": {"f": "dstStart/weekDay", "k": "currentIndex", "vals": [1, 2, 3, 4, 5, 6, 0]},
+                "ckDstStartTimePicker": {"f": "dstStart/time", "k": "time"},
+                "ckDstEndMonthCombo": {"f": "dstEnd/month", "k": "currentIndex", "vals": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
+                "ckDstEndWeekSeqCombo": {"f": "dstEnd/weekOrder", "k": "currentIndex", "vals": [1, 2, 3, 4, 5]},
+                "ckDstEndWeekDayCombo": {"f": "dstEnd/weekDay", "k": "currentIndex", "vals": [1, 2, 3, 4, 5, 6, 0]},
+                "ckDstEndTimePicker": {"f": "dstEnd/time", "k": "time"},
+                "ckDstOffsetCombo": {"f": "dstOffset", "k": "currentIndex", "vals": [30, 60, 90, 120]}
+            }
+        },
+        "maintenance": {
+            "cmd": "maintenance",
+            "fields": {
+                "mtEnableCombo": {"f": "enable", "k": "currentIndex", "vals": [1, 0]},
+                "mtDayCombo": {"f": "cycleType", "k": "currentIndex"},
+                "mtTimeInput": {"f": "rebootTime", "k": "time"}
+            }
+        }
+    }
+
+    // 程序启动：读回上次点"保存"持久化的各面板参数（面板打开时由 restorePanel 回填控件）；
+    // 键为控件 objectName（面板增删控件不错位）；协议格式面板（含 payload）反向映射回运行结构
+    Component.onCompleted: {
+        var saved = ConfigureManager.loadOtherSettingsValues();
+        if (saved === "")
+            return ;
+        var m = ({});
+        var sw = ({});
+        try {
+            var parsed = JSON.parse(saved);
+            for (var key in parsed) {
+                // 跳过下划线开头的说明性键（_hint 等）
+                if (key.charAt(0) === "_")
+                    continue;
+                var store = parsed[key];
+                if (!store || typeof store !== "object")
+                    continue;
+                // 协议格式面板：{"switch": ..., "payload": {协议字段: 值}}——顶层键是协议命令名，反查面板 key；
+                // switch 记入启动勾选表：随启动整体灌入 checkedMap，打开界面时左侧子节点与本页
+                // 复选框立即显示上次保存的勾选（不再逐面板点击激活）；
+                // payload 可能是嵌套对象（mainStream/encodeType 等），先按 "/" 路径展平再反查控件，
+                // 协议值按映射还原为控件原生值（vals 反查 index、num 数字转文本、1/0 转勾选）
+                if (store.payload !== undefined && store.payload !== null && typeof store.payload === "object") {
+                    var pkey = root.panelKeyOfCmd(key);
+                    if (pkey === "")
+                        continue;
+                    var pm = root.protocolMaps[pkey];
+                    var flat = ({});
+                    root.flattenPayload(store.payload, "", flat);
+                    var ppanel = ({});
+                    for (var fp in flat) {
+                        var oname = root.objectNameOfField(pm, fp);
+                        if (oname === "")
+                            continue;
+                        var fld = pm.fields[oname];
+                        ppanel[oname] = {"k": fld.k, "v": root.valueFromProtocol(fld, flat[fp])};
+                    }
+                    m[pkey] = ppanel;
+                    sw[pkey] = store.switch === "checked";
+                    continue;
+                }
+                var panel = ({});
+                for (var path in store) {
+                    var rec = store[path];
+                    // 跳过面板说明键（_name）与坏条目；name 字段不进运行结构；p 保留（下发时还原位置键）
+                    if (path.charAt(0) === "_" || !rec || typeof rec !== "object" || typeof rec.k !== "string")
+                        continue;
+                    panel[path] = typeof rec.p === "string" ? {
+                        "k": rec.k,
+                        "v": rec.v,
+                        "p": rec.p
+                    } : {
+                        "k": rec.k,
+                        "v": rec.v
+                    };
+                }
+                m[key] = panel;
+            }
+        } catch (e) {
+            // 配置内容损坏：放弃恢复，保持代码默认值
+            return ;
+        }
+        root.savedPanelValues = m;
+        // 勾选状态随启动整体恢复：文件里各面板的 switch 直接灌入 checkedMap，
+        // 打开“配置其它参数”界面时左侧子节点与本页复选框立即显示上次保存的勾选
+        root.checkedMap = sw;
+        // OSD 数据同步进与“OSD修改”弹窗共用的参数对象（两边重启后显示一致）
+        root.syncSharedOsdFromStore();
+    }
+
+    // 启动读回后把 OSD 数据同步进与“OSD修改”弹窗共用的参数对象：
+    // 两边共用 other_settings.json 的 osd 条目，重启后弹窗（applyShared）与本页（回填+readShared）显示一致
+    function syncSharedOsdFromStore() {
+        if (!root.sharedOsd)
+            return ;
+
+        var store = root.savedPanelValues["timeTitle"];
+        if (store === undefined)
+            return ;
+
+        var s = root.sharedOsd;
+        var hit = false;
+        if (store["osdSetCheck"] !== undefined) {
+            s.setTimeTitle = store["osdSetCheck"].v;
+            hit = true;
+        }
+        if (store["osdEnableCombo"] !== undefined) {
+            s.osdDisplayIndex = store["osdEnableCombo"].v;
+            hit = true;
+        }
+        if (store["osdTimeFormatCombo"] !== undefined) {
+            s.timeFormatIndex = store["osdTimeFormatCombo"].v;
+            hit = true;
+        }
+        if (store["osdShowWeekCheck"] !== undefined) {
+            s.showWeek = store["osdShowWeekCheck"].v;
+            hit = true;
+        }
+        if (store["osdTimeShowPosCombo"] !== undefined) {
+            s.titlePosIndex = store["osdTimeShowPosCombo"].v;
+            hit = true;
+        }
+        if (store["osdTitleInput"] !== undefined) {
+            s.titleContent = store["osdTitleInput"].v;
+            hit = true;
+        }
+        if (hit)
+            s.saved = true;
+    }
 
     function copyMap(src) {
         var m = {
@@ -203,7 +481,7 @@ Dialog {
 
     // 按 groups 顺序收集勾选的子节点，构造下发给 BatchSettingsTask 的设置项序列：
     // [{key, name, action, url, body}]
-    // - body 取面板已保存参数（savedPanelValues 序列化为 JSON），没保存过则为空串（发 GET）
+    // - body 由 bodyForDevice 组装（协议映射面板为 {"switch", "payload"} 格式），没保存过则为空串（发 GET）
     function buildBatchItems() {
         var items = [];
         for (var g = 0; g < root.groups.length; g++) {
@@ -223,17 +501,44 @@ Dialog {
                     "name": list[i].name,
                     "action": root.batchActionName(key),
                     "url": url,
-                    "body": saved === undefined ? "" : JSON.stringify(saved)
+                    "body": root.bodyForDevice(key)
                 });
+                console.log("buildBatchItems: key=" + key + ", name=" + list[i].name + ", url=" + url + ", body=" + items[items.length - 1].body);
             }
         }
         return items;
     }
 
+    // 下发设备用的请求体，与 other_settings.json 的面板格式完全一致：
+    // - 有协议映射的面板：{"switch": 面板勾选状态, "payload": {协议字段: 控件值}}（protocolPayload 组装）
+    // - 其余面板：本地配置表按控件 objectName 存键（可读稳定），设备协议沿用位置索引——
+    //   逐条用记录里的 p（位置索引）还原位置键，旧记录（键本身是位置键）直接用键；每条只发 {k, v}
+    function bodyForDevice(key) {
+        var saved = root.savedPanelValues[key];
+        if (saved === undefined)
+            return "";
+        var pm = root.protocolMaps[key];
+        if (pm !== undefined) {
+            return JSON.stringify({
+                "switch": root.isChecked(key) ? "checked" : "none",
+                "payload": root.protocolPayload(key, saved)
+            });
+        }
+        var out = {};
+        for (var k in saved) {
+            var rec = saved[k];
+            out[typeof rec.p === "string" ? rec.p : k] = {
+                "k": rec.k,
+                "v": rec.v
+            };
+        }
+        return JSON.stringify(out);
+    }
+
     // 已保存的网络设置 IP 地址
     // savedPanelValues["network"] 是 collectValues 按控件声明顺序收集的
-    // {path: {k, v}} 表，第一个 k==="ip" 的控件即"IP地址"输入框
-    // （其后依次为子网掩码、网关），故取首个 ip 记录即可
+    // {键: {k, v}} 表（键为控件 objectName），第一个 k==="ip" 的控件即
+    // "IP地址"输入框（其后依次为子网掩码、网关），故取首个 ip 记录即可
     function networkSavedIp() {
         var saved = root.savedPanelValues["network"];
         if (saved === undefined)
@@ -247,9 +552,10 @@ Dialog {
     }
 
     function persistedKind(obj) {
-        // 密码框不持久化
+        // 密码框（协议 userpassword/passwordconfirmation/password 需要密码值）：显式声明 objectName 的
+        // 才随面板持久化（映射在 protocolMaps 里的密码框都带 objectName）；未命名密码框仍不收集
         if (obj.echoMode !== undefined && obj.echoMode === TextInput.Password)
-            return "";
+            return typeof obj.objectName === "string" && obj.objectName !== "" ? "text" : "";
 
         if (obj.time !== undefined && typeof obj.time === "string")
             return "time";
@@ -263,8 +569,8 @@ Dialog {
         if (typeof obj.text === "function" && typeof obj.value === "string")
             return "ip";
 
-        // 只读的计算结果（如随编码方式联动的码率）不参与持久化
-        if ((obj instanceof TextArea || obj instanceof TextField) && obj.readOnly !== true)
+        // 只读文本框也参与收集（联动计算值随面板保存/下发；当前全文件仅音频编码 bitrate 一处只读）
+        if (obj instanceof TextArea || obj instanceof TextField)
             return "text";
 
         return "";
@@ -291,34 +597,139 @@ Dialog {
         return list;
     }
 
-    // 遍历面板，收集所有可持久化控件的当前值
-    function collectValues(obj, path, out) {
+    // 可持久化控件的配置键：objectName（各面板控件 objectName 直接抄自己的 id，语义唯一且增删控件不错位）
+    // 优先；未设置时回退位置索引（新面板控件漏写 objectName 的兜底）
+    function persistedKeyOf(obj, path) {
+        var name = obj.objectName;
+        return typeof name === "string" && name !== "" && name.indexOf("/") < 0 ? name : path;
+    }
+
+    // 协议命令名 → 面板 key（protocolMaps 反查；读协议格式文件时用）
+    function panelKeyOfCmd(cmd) {
+        for (var key in root.protocolMaps) {
+            if (root.protocolMaps[key].cmd === cmd)
+                return key;
+        }
+        return "";
+    }
+
+    // 面板协议映射内：协议字段名 → 控件 objectName
+    function objectNameOfField(pm, fld) {
+        for (var oname in pm.fields) {
+            if (pm.fields[oname].f === fld)
+                return oname;
+        }
+        return "";
+    }
+
+    // 条件字段是否满足（fld.if = {c: 条件控件 objectName, v: 期望值}：该控件保存值为 v 时才进 payload）
+    function condMatch(saved, fld) {
+        if (fld.if === undefined)
+            return true;
+        var rec = saved[fld.if.c];
+        return rec !== undefined && rec.v === fld.if.v;
+    }
+
+    // 运行结构值 → 协议值（写文件/下发时：currentIndex 按 vals 换算；checked → 1/0；num 文本数字化；其余原样）
+    function valueToProtocol(fld, v) {
+        if (fld.k === "currentIndex")
+            return fld.vals !== undefined ? fld.vals[v] : v;
+        if (fld.k === "checked")
+            return v === true || v === 1 ? 1 : 0;
+        if (fld.num === true && typeof v === "string") {
+            var n = parseInt(v);
+            return isNaN(n) ? 0 : n;
+        }
+        return v;
+    }
+
+    // 协议值 → 运行结构原生值（读回文件时：vals 反查 index、1/0 → 勾选、数字 → 文本，控件回填不跑类型）
+    function valueFromProtocol(fld, v) {
+        if (fld.k === "currentIndex")
+            return fld.vals !== undefined ? fld.vals.indexOf(v) : v;
+        if (fld.k === "checked")
+            return v === 1 || v === true;
+        if (fld.num === true)
+            return String(v);
+        return v;
+    }
+
+    // 嵌套路径（"a/b"）写入 payload 对象（中间层级不存在时逐层创建）
+    function setPayloadPath(payload, path, v) {
+        var parts = path.split("/");
+        var cur = payload;
+        for (var i = 0; i < parts.length - 1; i++) {
+            if (cur[parts[i]] === undefined)
+                cur[parts[i]] = {};
+            cur = cur[parts[i]];
+        }
+        cur[parts[parts.length - 1]] = v;
+    }
+
+    // 嵌套 payload 对象展平成 {"a/b": 值} 路径表（读回文件时反查控件用）
+    function flattenPayload(obj, prefix, out) {
+        for (var k in obj) {
+            var path = prefix === "" ? k : prefix + "/" + k;
+            if (obj[k] !== null && typeof obj[k] === "object")
+                root.flattenPayload(obj[k], path, out);
+            else
+                out[path] = obj[k];
+        }
+    }
+
+    // 协议面板 payload 组装（写文件与下发共用）：fixed 固定字段在前，控件字段按映射换算，
+    // 映射外的控件（如面板勾选框、无协议对应的控件）不进 payload，if 条件不满足的字段跳过
+    function protocolPayload(key, saved) {
+        var pm = root.protocolMaps[key];
+        var payload = {};
+        if (pm.fixed !== undefined) {
+            for (var fx in pm.fixed)
+                root.setPayloadPath(payload, fx, pm.fixed[fx]);
+        }
+        for (var oname in saved) {
+            var fld = pm.fields[oname];
+            if (fld === undefined || !root.condMatch(saved, fld))
+                continue;
+            root.setPayloadPath(payload, fld.f, root.valueToProtocol(fld, saved[oname].v));
+        }
+        return payload;
+    }
+
+    // 遍历面板，收集所有可持久化控件的当前值（labels 同步收集控件可读名，仅供人工查看配置文件；
+    // 每条附 p=位置索引，供下发时按设备协议还原位置键）
+    function collectValues(obj, path, out, labels) {
         var kind = root.persistedKind(obj);
         if (kind !== "") {
+            var key = root.persistedKeyOf(obj, path);
+            var v;
             if (kind === "time")
-                out[path] = {"k": kind, "v": obj.time};
+                v = obj.time;
             else if (kind === "checked")
-                out[path] = {"k": kind, "v": obj.checked};
+                v = obj.checked;
             else if (kind === "currentIndex")
-                out[path] = {"k": kind, "v": obj.currentIndex};
+                v = obj.currentIndex;
             else if (kind === "ip")
-                out[path] = {"k": kind, "v": obj.text()};
+                v = obj.text();
             else
-                out[path] = {"k": kind, "v": obj.text};
+                v = obj.text;
+            out[key] = {"k": kind, "v": v, "p": path};
+            labels[key] = root.controlLabel(obj);
             return ;
         }
         if (root.isSkipped(obj))
             return ;
 
         var kids = root.childList(obj);
-        for (var i = 0; i < kids.length; i++) root.collectValues(kids[i], path + "/" + i, out)
+        for (var i = 0; i < kids.length; i++) root.collectValues(kids[i], path + "/" + i, out, labels)
     }
 
-    // 用已保存的值回填面板控件
+    // 用已保存的值回填面板控件（objectName 键优先；旧配置文件是位置键，miss 时回退位置键兼容）
     function applyValues(obj, path, store) {
         var kind = root.persistedKind(obj);
         if (kind !== "") {
-            var rec = store[path];
+            var rec = store[root.persistedKeyOf(obj, path)];
+            if (rec === undefined)
+                rec = store[path];
             if (rec === undefined)
                 return ;
 
@@ -348,12 +759,19 @@ Dialog {
 
         var values = {
         };
-        root.collectValues(panelLoader.item, "0", values);
+        var labels = {
+        };
+        root.collectValues(panelLoader.item, "0", values, labels);
         var m = {
         };
         for (var k in root.savedPanelValues) m[k] = root.savedPanelValues[k]
         m[root.selectedKey] = values;
         root.savedPanelValues = m;
+        var nm = {
+        };
+        for (var nk in root.savedPanelNames) nm[nk] = root.savedPanelNames[nk]
+        nm[root.selectedKey] = labels;
+        root.savedPanelNames = nm;
         // OSD设置页额外写入与“OSD修改”弹窗共用的参数（同步函数定义在面板内部，通过 item 调用）
         if (root.selectedKey === "timeTitle" && panelLoader.item.writeShared)
             panelLoader.item.writeShared(root.sharedOsd);
@@ -361,7 +779,80 @@ Dialog {
         root.markSaved(root.selectedKey);
         // 保存即固化全部勾选状态：任何界面点保存，左侧子节点勾选与各页
         root.openCheckedMap = root.copyMap(root.checkedMap);
+        // 各面板参数持久化到独立 JSON 文件 other_settings.json：程序下次启动时按其恢复
+        root.persistPanelValues();
         saveTipBox.show(qsTr("温馨提示"), qsTr("保存成功"));
+    }
+
+    // 各面板参数表写入独立 JSON 文件 other_settings.json（缩进格式，便于手工查看编辑）：
+    // - 有协议映射的面板（protocolMaps）：按设备协议格式存——顶层键为协议命令名，
+    //   {"switch": 面板勾选状态("checked"/"none"), "payload": {协议字段: 控件值}}，手工修改只改 payload 里的值
+    // - 其余面板：键=控件 objectName 的 {k, v, name, p} 表（手工修改只改 v）
+    // - "_hint"：文件结构说明；旧格式面板的 "_name"/"name" 为显示名注释
+    // 下划线开头的键与 name 字段不参与恢复
+    function persistPanelValues() {
+        var out = {
+            "_hint": "各设置页点保存后的参数; 协议格式面板(如netInfo): switch=面板勾选状态, payload内按设备协议字段存值(手工修改只改payload里的值); 其余面板: 键=控件id(objectName), 每条v=控件值(只改v), k=控件类型, name=控件说明, p=下发位置索引(勿改); 下划线开头的键为说明, 不参与恢复"
+        };
+        for (var key in root.savedPanelValues) {
+            var store = root.savedPanelValues[key];
+            var pm = root.protocolMaps[key];
+            if (pm !== undefined) {
+                // 协议格式面板：{"switch": 面板勾选状态, "payload": {协议字段: 控件值}}；
+                // payload 组装走 protocolPayload（fixed 固定字段 + vals/num/if 换算，映射外的控件不进 payload）
+                out[pm.cmd] = {
+                    "switch": root.isChecked(key) ? "checked" : "none",
+                    "payload": root.protocolPayload(key, store)
+                };
+                continue;
+            }
+            var names = root.savedPanelNames[key];
+            var panel = {
+                "_name": root.panelNameOf(key)
+            };
+            for (var path in store) {
+                var rec = store[path];
+                panel[path] = {
+                    "k": rec.k,
+                    "v": rec.v,
+                    "name": names !== undefined && names[path] !== undefined ? names[path] : "",
+                    "p": rec.p !== undefined ? rec.p : path
+                };
+            }
+            out[key] = panel;
+        }
+        ConfigureManager.saveOtherSettingsValues(JSON.stringify(out));
+    }
+
+    // 面板 key → 左侧分类树显示名
+    function panelNameOf(key) {
+        for (var g = 0; g < root.groups.length; g++) {
+            var list = root.groups[g].items;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].key === key)
+                    return list[i].name;
+            }
+        }
+        return "";
+    }
+
+    // 取控件可读名：优先同容器里的 Label 文本；找不到再取自身 text（复选框等，输入框的 text 是值不取）
+    function controlLabel(obj) {
+        var p = obj.parent;
+        if (p) {
+            var kids = root.childList(p);
+            for (var i = 0; i < kids.length; i++) {
+                var k = kids[i];
+                if (k === obj || root.persistedKind(k) !== "" || root.isSkipped(k))
+                    continue;
+                var t = k.text;
+                if (typeof t === "string" && t !== "")
+                    return t;
+            }
+        }
+        if (typeof obj.text === "string" && obj.text !== "" && !(obj instanceof TextField) && !(obj instanceof TextArea))
+            return obj.text;
+        return "";
     }
 
     // 点分 IP 转 4 段整数数组；格式非法返回 null
@@ -476,6 +967,59 @@ Dialog {
     anchors.centerIn: Overlay.overlay
     title: qsTr("其它设置")
     // 每次打开恢复默认选中“网络设置”，并记录当前勾选状态用于未保存回滚
+    // “OSD修改”弹窗点保存：把这份数据并入本弹窗的 OSD 运行结构并按协议格式写入 other_settings.json
+    // （两边共用同一个 osd 条目）；勾选状态一并固化——弹窗“设定时间和标题”勾选等同本页“OSD设置”面板勾选，
+    // 之后关闭本弹窗不会被当作未保存修改回滚
+    Connections {
+        target: root.sharedOsd
+
+        function onOsdSavedFromDialog() {
+            var s = root.sharedOsd;
+            var values = {
+                "osdSetCheck": {
+                    "k": "checked",
+                    "v": s.setTimeTitle
+                },
+                "osdEnableCombo": {
+                    "k": "currentIndex",
+                    "v": s.osdDisplayIndex
+                },
+                "osdTimeFormatCombo": {
+                    "k": "currentIndex",
+                    "v": s.timeFormatIndex
+                },
+                "osdShowWeekCheck": {
+                    "k": "checked",
+                    "v": s.showWeek
+                },
+                "osdTimeShowPosCombo": {
+                    "k": "currentIndex",
+                    "v": s.titlePosIndex
+                },
+                "osdTitleInput": {
+                    "k": "text",
+                    "v": s.titleContent
+                }
+            };
+            // 映射外已有值（叠加方式/时间显示位置等弹窗没有的项）保留，弹窗拥有的项覆盖
+            var merged = ({
+            });
+            var old = root.savedPanelValues["timeTitle"];
+            for (var ok in old) merged[ok] = old[ok]
+            for (var nk in values) merged[nk] = values[nk]
+            var m = ({
+            });
+            for (var pk in root.savedPanelValues) m[pk] = root.savedPanelValues[pk]
+            m["timeTitle"] = merged;
+            root.savedPanelValues = m;
+            root.setChecked("timeTitle", s.setTimeTitle);
+            root.markSaved("timeTitle");
+            root.openCheckedMap = root.copyMap(root.checkedMap);
+            root.persistPanelValues();
+        }
+
+    }
+
     onAboutToShow: {
         selectedKey = "network";
         root.openCheckedMap = root.copyMap(root.checkedMap);
@@ -501,6 +1045,7 @@ Dialog {
 
             AppCheckBox {
                 id: ethCheck
+                objectName: "ethCheck"
 
                 text: qsTr("设置以太网")
                 checked: false
@@ -552,6 +1097,7 @@ Dialog {
 
                             IpInput {
                                 id: ipAddrInput
+                                objectName: "ipAddrInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 // 联动默认值：与设备列表第一台设备同网段的网卡（详见 networkInfo）
@@ -574,6 +1120,7 @@ Dialog {
 
                             IpInput {
                                 id: maskInput
+                                objectName: "maskInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 // 联动默认值：与 IP 地址同源的网卡子网掩码
@@ -596,6 +1143,7 @@ Dialog {
 
                             IpInput {
                                 id: gwInput
+                                objectName: "gwInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 // 联动默认值：与 IP 地址同源的网卡网关
@@ -618,6 +1166,7 @@ Dialog {
 
                             IpInput {
                                 id: dns1Input
+                                objectName: "dns1Input"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 value: "114.114.114.114"
@@ -639,6 +1188,7 @@ Dialog {
 
                             IpInput {
                                 id: dns2Input
+                                objectName: "dns2Input"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 value: "8.8.8.8"
@@ -660,6 +1210,7 @@ Dialog {
 
                             AppComboBox {
                                 id: dhcpCombo
+                                objectName: "dhcpCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 Layout.preferredHeight: root.ctrlH
@@ -682,6 +1233,7 @@ Dialog {
 
                             AppTextField {
                                 id: mtuInput
+                                objectName: "mtuInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 text: "1400"
@@ -769,6 +1321,7 @@ Dialog {
 
             AppCheckBox {
                 id: osdSetCheck
+                objectName: "osdSetCheck"
 
                 text: qsTr("设置时间和标题")
                 checked: false
@@ -825,6 +1378,7 @@ Dialog {
 
                             AppComboBox {
                                 id: osdEnableCombo
+                                objectName: "osdEnableCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 Layout.preferredHeight: root.ctrlH
@@ -849,6 +1403,7 @@ Dialog {
 
                             AppComboBox {
                                 id: osdOverlayCombo
+                                objectName: "osdOverlayCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 Layout.preferredHeight: root.ctrlH
@@ -872,6 +1427,7 @@ Dialog {
 
                             AppComboBox {
                                 id: osdTimePosCombo
+                                objectName: "osdTimePosCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 Layout.preferredHeight: root.ctrlH
@@ -896,6 +1452,7 @@ Dialog {
 
                             AppComboBox {
                                 id: osdTimeFormatCombo
+                                objectName: "osdTimeFormatCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 Layout.preferredHeight: root.ctrlH
@@ -904,6 +1461,7 @@ Dialog {
 
                             AppCheckBox {
                                 id: osdShowWeekCheck
+                                objectName: "osdShowWeekCheck"
 
                                 text: qsTr("显示星期")
                                 checked: false
@@ -926,6 +1484,7 @@ Dialog {
 
                             AppComboBox {
                                 id: osdTimeShowPosCombo
+                                objectName: "osdTimeShowPosCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
                                 Layout.preferredHeight: root.ctrlH
@@ -950,6 +1509,7 @@ Dialog {
 
                             AppTextField {
                                 id: osdTitleInput
+                                objectName: "osdTitleInput"
 
                                 // 与上方输入框保持同样的展示宽度（不再用 fillWidth 拉长），最大宽度上限 400
                                 Layout.preferredWidth: ScreenTools.scaleNum(220)
@@ -1027,6 +1587,7 @@ Dialog {
             // 设置28181 分组框（带边框）
             AppCheckBox {
                 id: gbSetCheck
+                objectName: "gbSetCheck"
 
                 text: qsTr("设置28181")
                 checked: false
@@ -1092,6 +1653,7 @@ Dialog {
 
                                 AppComboBox {
                                     id: gbEnableCombo
+                                    objectName: "gbEnableCombo"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1116,6 +1678,7 @@ Dialog {
 
                                 AppTextField {
                                     id: localSipPortInput
+                                    objectName: "localSipPortInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1138,6 +1701,7 @@ Dialog {
 
                                 AppTextField {
                                     id: sipServerIdInput
+                                    objectName: "sipServerIdInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1159,6 +1723,7 @@ Dialog {
 
                                 AppTextField {
                                     id: sipServerDomainInput
+                                    objectName: "sipServerDomainInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1180,6 +1745,7 @@ Dialog {
 
                                 IpInput {
                                     id: sipServerIpInput
+                                    objectName: "sipServerIpInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1201,6 +1767,7 @@ Dialog {
 
                                 AppTextField {
                                     id: sipServerPortInput
+                                    objectName: "sipServerPortInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1223,6 +1790,7 @@ Dialog {
 
                                 AppTextField {
                                     id: sipUserInput
+                                    objectName: "sipUserInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1244,6 +1812,7 @@ Dialog {
 
                                 AppTextField {
                                     id: sipAuthIdInput
+                                    objectName: "sipAuthIdInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1265,6 +1834,7 @@ Dialog {
 
                                 AppPasswordField {
                                     id: passwordInput
+                                    objectName: "passwordInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1286,6 +1856,7 @@ Dialog {
 
                                 AppPasswordField {
                                     id: confirmPasswordInput
+                                    objectName: "confirmPasswordInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1307,6 +1878,7 @@ Dialog {
 
                                 AppTextField {
                                     id: registerExpireInput
+                                    objectName: "registerExpireInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1339,6 +1911,7 @@ Dialog {
 
                                 AppTextField {
                                     id: heartbeatInput
+                                    objectName: "heartbeatInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1361,6 +1934,7 @@ Dialog {
 
                                 AppTextField {
                                     id: heartbeatTimeoutInput
+                                    objectName: "heartbeatTimeoutInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1383,6 +1957,7 @@ Dialog {
 
                                 AppComboBox {
                                     id: streamIndexCombo
+                                    objectName: "streamIndexCombo"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1407,6 +1982,7 @@ Dialog {
 
                                 AppTextField {
                                     id: alarmIdInput
+                                    objectName: "alarmIdInput"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(180)
                                     Layout.fillWidth: true
@@ -1458,6 +2034,7 @@ Dialog {
 
             AppCheckBox {
                 id: vcSetCheck
+                objectName: "vcSetCheck"
 
                 text: qsTr("设置视频采集")
                 checked: false
@@ -1512,6 +2089,7 @@ Dialog {
 
                             AppTextField {
                                 id: vcBrightnessInput
+                                objectName: "vcBrightnessInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 text: "128"
@@ -1533,6 +2111,7 @@ Dialog {
 
                             AppTextField {
                                 id: vcSaturationInput
+                                objectName: "vcSaturationInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 text: "128"
@@ -1554,6 +2133,7 @@ Dialog {
 
                             AppTextField {
                                 id: vcSharpnessInput
+                                objectName: "vcSharpnessInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 text: "128"
@@ -1575,6 +2155,7 @@ Dialog {
 
                             AppTextField {
                                 id: vcContrastInput
+                                objectName: "vcContrastInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 text: "128"
@@ -1596,6 +2177,7 @@ Dialog {
 
                             AppTextField {
                                 id: vcBacklightInput
+                                objectName: "vcBacklightInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 text: "128"
@@ -1617,6 +2199,7 @@ Dialog {
 
                             AppComboBox {
                                 id: vcWhiteBalanceCombo
+                                objectName: "vcWhiteBalanceCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 Layout.preferredHeight: root.ctrlH
@@ -1639,6 +2222,7 @@ Dialog {
 
                             AppComboBox {
                                 id: vcHFlipCombo
+                                objectName: "vcHFlipCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 Layout.preferredHeight: root.ctrlH
@@ -1661,6 +2245,7 @@ Dialog {
 
                             AppComboBox {
                                 id: vcVFlipCombo
+                                objectName: "vcVFlipCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 Layout.preferredHeight: root.ctrlH
@@ -1720,6 +2305,7 @@ Dialog {
 
                             AppComboBox {
                                 id: vcWdrCombo
+                                objectName: "vcWdrCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 Layout.preferredHeight: root.ctrlH
@@ -1791,6 +2377,7 @@ Dialog {
 
             AppCheckBox {
                 id: veSetCheck
+                objectName: "veSetCheck"
 
                 text: qsTr("设置视频编码")
                 checked: false
@@ -1871,6 +2458,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veMainCodecCombo
+                                objectName: "veMainCodecCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1879,6 +2467,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veSubCodecCombo
+                                objectName: "veSubCodecCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1902,6 +2491,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veMainResCombo
+                                objectName: "veMainResCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1911,6 +2501,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veSubResCombo
+                                objectName: "veSubResCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1935,6 +2526,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veMainRateCtlCombo
+                                objectName: "veMainRateCtlCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1943,6 +2535,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veSubRateCtlCombo
+                                objectName: "veSubRateCtlCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1966,6 +2559,7 @@ Dialog {
 
                             AppTextField {
                                 id: veMainGopInput
+                                objectName: "veMainGopInput"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -1986,6 +2580,7 @@ Dialog {
 
                             AppTextField {
                                 id: veSubGopInput
+                                objectName: "veSubGopInput"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -2021,6 +2616,7 @@ Dialog {
 
                             AppTextField {
                                 id: veMainBitrateInput
+                                objectName: "veMainBitrateInput"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -2041,6 +2637,7 @@ Dialog {
 
                             AppTextField {
                                 id: veSubBitrateInput
+                                objectName: "veSubBitrateInput"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -2076,6 +2673,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veMainFpsCombo
+                                objectName: "veMainFpsCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -2089,6 +2687,7 @@ Dialog {
 
                             AppComboBox {
                                 id: veSubFpsCombo
+                                objectName: "veSubFpsCombo"
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
@@ -2154,6 +2753,7 @@ Dialog {
 
                                     AppComboBox {
                                         id: veBaseProfileCombo
+                                        objectName: "veBaseProfileCombo"
 
                                         Layout.preferredWidth: veFieldWidth
                                         Layout.preferredHeight: root.ctrlH
@@ -2177,6 +2777,7 @@ Dialog {
 
                                     AppComboBox {
                                         id: veWdrModeCombo
+                                        objectName: "veWdrModeCombo"
 
                                         Layout.preferredWidth: veFieldWidth
                                         Layout.preferredHeight: root.ctrlH
@@ -2200,6 +2801,7 @@ Dialog {
 
                                     AppComboBox {
                                         id: vePrivateDataCombo
+                                        objectName: "vePrivateDataCombo"
 
                                         Layout.preferredWidth: veFieldWidth
                                         Layout.preferredHeight: root.ctrlH
@@ -2261,6 +2863,7 @@ Dialog {
 
             AppCheckBox {
                 id: aeSetCheck
+                objectName: "aeSetCheck"
 
                 text: qsTr("设置音频编码")
                 checked: false
@@ -2316,6 +2919,7 @@ Dialog {
 
                             AppComboBox {
                                 id: aeEnableCombo
+                                objectName: "aeEnableCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(180)
                                 Layout.preferredHeight: root.ctrlH
@@ -2340,6 +2944,7 @@ Dialog {
 
                             AppComboBox {
                                 id: aeTypeCombo
+                                objectName: "aeTypeCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(180)
                                 Layout.preferredHeight: root.ctrlH
@@ -2364,6 +2969,7 @@ Dialog {
 
                             AppComboBox {
                                 id: aeSampleCombo
+                                objectName: "aeSampleCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(180)
                                 Layout.preferredHeight: root.ctrlH
@@ -2387,6 +2993,7 @@ Dialog {
 
                             AppTextField {
                                 id: aeBitrateInput
+                                objectName: "aeBitrateInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(180)
                                 Layout.preferredHeight: root.ctrlH
@@ -2438,6 +3045,7 @@ Dialog {
 
             AppCheckBox {
                 id: arSetCheck
+                objectName: "arSetCheck"
 
                 text: qsTr("设置音量配置")
                 checked: false
@@ -2481,11 +3089,15 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             AppCheckBox {
+                                id: arCaptureCheck
+                                objectName: "arCaptureCheck"
+
                                 text: qsTr("采集音量(1-100)")
                             }
 
                             AppTextField {
                                 id: arCaptureInput
+                                objectName: "arCaptureInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(250)
                                 Layout.preferredHeight: root.ctrlH
@@ -2513,11 +3125,15 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             AppCheckBox {
+                                id: arPlayCheck
+                                objectName: "arPlayCheck"
+
                                 text: qsTr("播放音量(1-100)")
                             }
 
                             AppTextField {
                                 id: arPlayInput
+                                objectName: "arPlayInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(250)
                                 Layout.preferredHeight: root.ctrlH
@@ -2605,6 +3221,7 @@ Dialog {
 
                 AppComboBox {
                     id: mdEnableCombo
+                    objectName: "mdEnableCombo"
 
                     Layout.preferredWidth: ScreenTools.scaleNum(250)
                     Layout.preferredHeight: root.ctrlH
@@ -2653,6 +3270,7 @@ Dialog {
 
                 AppComboBox {
                     id: adEnableCombo
+                    objectName: "adEnableCombo"
 
                     Layout.preferredWidth: ScreenTools.scaleNum(250)
                     Layout.preferredHeight: root.ctrlH
@@ -2675,6 +3293,7 @@ Dialog {
 
             AppCheckBox {
                 id: accSetCheck
+                objectName: "accSetCheck"
 
                 text: qsTr("修改admin账号密码")
                 checked: false
@@ -2726,6 +3345,7 @@ Dialog {
 
                             PwdInput {
                                 id: accNewPwdInput
+                                objectName: "accNewPwdInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(330)
                                 Layout.preferredHeight: root.ctrlH
@@ -2748,6 +3368,7 @@ Dialog {
 
                             PwdInput {
                                 id: accConfirmPwdInput
+                                objectName: "accConfirmPwdInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(330)
                                 Layout.preferredHeight: root.ctrlH
@@ -2808,6 +3429,7 @@ Dialog {
 
             AppCheckBox {
                 id: mtSetCheck
+                objectName: "mtSetCheck"
 
                 text: qsTr("定时维护")
                 checked: false
@@ -2863,6 +3485,7 @@ Dialog {
 
                             AppComboBox {
                                 id: mtEnableCombo
+                                objectName: "mtEnableCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(250)
                                 Layout.preferredHeight: root.ctrlH
@@ -2887,6 +3510,7 @@ Dialog {
 
                             AppComboBox {
                                 id: mtDayCombo
+                                objectName: "mtDayCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(250)
                                 Layout.preferredHeight: root.ctrlH
@@ -2910,6 +3534,7 @@ Dialog {
 
                             AppTimePicker {
                                 id: mtTimeInput
+                                objectName: "mtTimeInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(150)
                                 Layout.preferredHeight: root.ctrlH
@@ -2961,6 +3586,7 @@ Dialog {
 
             AppCheckBox {
                 id: langSetCheck
+                objectName: "langSetCheck"
 
                 text: qsTr("设置设备语言")
                 checked: false
@@ -3012,6 +3638,7 @@ Dialog {
 
                             AppComboBox {
                                 id: langCombo
+                                objectName: "langCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(250)
                                 Layout.preferredHeight: root.ctrlH
@@ -3066,6 +3693,7 @@ Dialog {
 
             AppCheckBox {
                 id: ckSetCheck
+                objectName: "ckSetCheck"
 
                 text: qsTr("时钟设置")
                 checked: false
@@ -3117,6 +3745,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckModeCombo
+                                objectName: "ckModeCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
@@ -3140,6 +3769,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckZoneCombo
+                                objectName: "ckZoneCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
@@ -3165,6 +3795,7 @@ Dialog {
 
                             AppTextField {
                                 id: ckNtpIpInput
+                                objectName: "ckNtpIpInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
@@ -3188,6 +3819,7 @@ Dialog {
 
                             AppTextField {
                                 id: ckNtpPortInput
+                                objectName: "ckNtpPortInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
@@ -3223,6 +3855,7 @@ Dialog {
 
                             AppTextField {
                                 id: ckRefreshInput
+                                objectName: "ckRefreshInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
@@ -3259,6 +3892,7 @@ Dialog {
 
                             AppTextField {
                                 id: ckTimeInput
+                                objectName: "ckTimeInput"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(200)
                                 Layout.preferredHeight: root.ctrlH
@@ -3268,6 +3902,7 @@ Dialog {
 
                             AppCheckBox {
                                 id: ckSetTimeCheck
+                                objectName: "ckSetTimeCheck"
 
                                 text: qsTr("设置时间")
                                 checked: false
@@ -3290,6 +3925,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstEnableCombo
+                                objectName: "ckDstEnableCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
@@ -3322,6 +3958,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstStartMonthCombo
+                                objectName: "ckDstStartMonthCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(110)
                                 Layout.preferredHeight: root.ctrlH
@@ -3330,6 +3967,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstStartWeekSeqCombo
+                                objectName: "ckDstStartWeekSeqCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(140)
                                 Layout.preferredHeight: root.ctrlH
@@ -3339,6 +3977,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstStartWeekDayCombo
+                                objectName: "ckDstStartWeekDayCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(100)
                                 Layout.preferredHeight: root.ctrlH
@@ -3348,6 +3987,7 @@ Dialog {
 
                             AppTimePicker {
                                 id: ckDstStartTimePicker
+                                objectName: "ckDstStartTimePicker"
 
                                 Layout.preferredHeight: root.ctrlH
                                 fieldWidth: ScreenTools.scaleNum(110)
@@ -3374,6 +4014,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstEndMonthCombo
+                                objectName: "ckDstEndMonthCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(110)
                                 Layout.preferredHeight: root.ctrlH
@@ -3382,6 +4023,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstEndWeekSeqCombo
+                                objectName: "ckDstEndWeekSeqCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(140)
                                 Layout.preferredHeight: root.ctrlH
@@ -3390,6 +4032,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstEndWeekDayCombo
+                                objectName: "ckDstEndWeekDayCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(100)
                                 Layout.preferredHeight: root.ctrlH
@@ -3399,6 +4042,7 @@ Dialog {
 
                             AppTimePicker {
                                 id: ckDstEndTimePicker
+                                objectName: "ckDstEndTimePicker"
 
                                 Layout.preferredHeight: root.ctrlH
                                 fieldWidth: ScreenTools.scaleNum(110)
@@ -3425,6 +4069,7 @@ Dialog {
 
                             AppComboBox {
                                 id: ckDstOffsetCombo
+                                objectName: "ckDstOffsetCombo"
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(150)
                                 Layout.preferredHeight: root.ctrlH
@@ -3609,6 +4254,7 @@ Dialog {
                                 // 只有勾选框控制整组勾选；点击分类名不会勾选
                                 AppCheckBox {
                                     id: groupChk
+                                    objectName: "groupChk"
 
                                     Layout.preferredWidth: ScreenTools.scaleNum(26)
                                     Layout.preferredHeight: ScreenTools.scaleNum(28)
@@ -3684,6 +4330,7 @@ Dialog {
                                             // 勾选框与节点名分离：点框只勾选，点名字只切换参数页
                                             AppCheckBox {
                                                 id: subChk
+                                                objectName: "subChk"
 
                                                 Layout.preferredWidth: ScreenTools.scaleNum(26)
                                                 Layout.preferredHeight: ScreenTools.scaleNum(28)

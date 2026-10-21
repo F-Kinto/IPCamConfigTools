@@ -84,6 +84,10 @@ AppContentDialog {
     // 保存按钮
     onOkClicked: {
         root.saveShared();
+        // 通知其它设置弹窗把这份数据按协议格式写入 other_settings.json（重启后两边同步显示）
+        if (root.sharedOsd)
+            root.sharedOsd.osdSavedFromDialog();
+
         root.accept();
     }
 

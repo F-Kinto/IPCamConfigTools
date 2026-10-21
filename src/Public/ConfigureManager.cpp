@@ -8,6 +8,8 @@
 #include <QFileInfo>
 #include <QDateTime>
 #include <QSettings>
+#include <QSaveFile>
+#include <QJsonDocument>
 #include <QObject>
 #include <QCoreApplication>
 #include <QDir>
@@ -346,4 +348,45 @@ void ConfigureManager::setUpgradeDir(const QString& dir)
     settings.setValue(UpgradeDirSetting, newValue);
     settings.sync();
     emit upgradeDirChanged();
+}
+
+QString ConfigureManager::otherSettingsJsonPath() const
+{
+    // 与 config.ini 同目录的独立 JSON 文件（带缩进与注释性字段，便于手工查看与编辑）
+    const QFileInfo info(networkCardConfigPath());
+    return info.absolutePath() + "/other_settings.json";
+}
+
+bool ConfigureManager::writeOtherSettingsJson(const QString& json)
+{
+    // 先校验合法 JSON，再以缩进格式原子写入（QSaveFile：写一半失败不会留下半截文件）
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (doc.isNull())
+        return false;
+
+    QSaveFile file(otherSettingsJsonPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    file.write(doc.toJson(QJsonDocument::Indented));
+    return file.commit();
+}
+
+void ConfigureManager::saveOtherSettingsValues(const QString& json)
+{
+    writeOtherSettingsJson(json);
+}
+
+QString ConfigureManager::loadOtherSettingsValues()
+{
+    // 独立 JSON 文件不存在（从未保存过）：返回空串，各面板保持代码默认值
+    QFile file(otherSettingsJsonPath());
+    if (!file.exists())
+        return QString();
+
+    if (!file.open(QIODevice::ReadOnly))
+        return QString();
+
+    const QByteArray raw = file.readAll();
+    // 内容非合法 JSON（被手改坏）：放弃恢复，保持代码默认值
+    return QJsonDocument::fromJson(raw).isNull() ? QString() : QString::fromUtf8(raw);
 }

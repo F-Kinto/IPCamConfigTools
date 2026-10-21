@@ -58,6 +58,12 @@ class ConfigureManager : public QObject {
     QString upgradeDir() const;
     void    setUpgradeDir(const QString& dir);
 
+    // "配置其他参数"各面板点"保存"后的参数表（JSON 字符串，结构见 other_settings.json 的 _hint 字段）
+    // 以独立 JSON 文件存放在 config.ini 同目录（带缩进与注释性字段，便于手工查看编辑）；
+    // 程序启动时读回，恢复各面板控件上次保存的值
+    Q_INVOKABLE void    saveOtherSettingsValues(const QString& json);
+    Q_INVOKABLE QString loadOtherSettingsValues();
+
   signals:
     void settingFilePathChanged();
     void languageTypeChanged();
@@ -72,6 +78,9 @@ class ConfigureManager : public QObject {
     bool resetJsonObjValue(QJsonObject& rootObj);
     // 初始化（并按需创建）程序目录下的工作目录
     void    initAppDir();
+    // "配置其他参数"参数表的独立 JSON 文件路径（与 config.ini 同目录）
+    QString otherSettingsJsonPath() const;
+    bool    writeOtherSettingsJson(const QString& json);
     QString getAppDir(const EnumNameSpace::AppDir& cmd);
 
   private:

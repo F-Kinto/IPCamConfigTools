@@ -1447,6 +1447,9 @@ ApplicationWindow {
         property int titlePosIndex: 4
         property string titleContent: ""
         property bool saved: false
+        // “OSD修改”弹窗点保存时发出：其它设置弹窗监听并把这份数据按协议格式写入 other_settings.json
+        // （两边共用同一个 osd 条目，重启后显示一致）
+        signal osdSavedFromDialog()
     }
 
     // ===== OSD修改弹窗 =====

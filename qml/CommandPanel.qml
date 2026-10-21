@@ -416,6 +416,7 @@ ColumnLayout {
         Layout.preferredHeight: panel.controlHeight
         text: qsTr("锁定默认参数")
         onToggled: host.logAction("%1已%2".arg(text).arg(checked ? "勾选" : "取消勾选"))
+        visible: false
     }
 
     RowLayout {
