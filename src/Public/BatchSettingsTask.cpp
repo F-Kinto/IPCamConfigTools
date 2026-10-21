@@ -1,12 +1,16 @@
 #include "BatchSettingsTask.h"
 #include "AsynRequest.h"
+#include "ConfigureManager.h"
 #include "RequestMessageData.h"
+#include <QDebug>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSslConfiguration>
 #include <QSslSocket>
 #include <QTimer>
+#include <QUrl>
 
 namespace {
 // 单项请求超时：5 秒（与 DeviceApiClient 缺省口径一致）
@@ -22,6 +26,42 @@ constexpr int kRestartWaitMs = 25 * 1000;
 bool isRestartKey(const QString& key)
 {
     return key == QLatin1String("network") || key == QLatin1String("videoEncode") || key == QLatin1String("audioEncode");
+}
+
+// 统一下发接口（%1 = 设备 IP）
+constexpr char kUrlTemplate[] = "http://%1/goform/ipcParams";
+
+// 面板 key → ipcParams 指令名（与 OtherSettingsDialog.qml 的 protocolMaps[key].cmd 对应，
+// protocolMaps 调整面板协议名时同步维护此表）
+// clock 的协议名为 setTimeAttr，get/set 指令按 get/set+首字母大写推导，固件确认后如有出入直接改这里
+struct PanelCmdSpec {
+    const char* key;    // 界面面板 key
+    const char* cmd;    // 协议命令名（other_settings.json 顶层条目键）
+    const char* getCmd; // GET 指令（读设备当前配置）
+    const char* setCmd; // POST 指令（设置）
+};
+const PanelCmdSpec kPanelCmds[] = {
+    {"network",       "netInfo",      "getNetInfo",      "setNetInfo"},
+    {"gb28181",       "gb28181",     "getGb28181Attr",     "setGb28181Attr"},
+    {"videoCapture",  "videoCapture", "getImageAttr", "setImageAttr"},
+    {"timeTitle",     "osd",         "getOSDAttr",         "setOSDAttr"},
+    {"videoEncode",   "videoEncode",  "getVideoAttr",  "setVideoAttr"},
+    {"audioEncode",   "audioEncode",  "getAudioAttr",  "setAudioAttr"},
+    {"audioReconfig", "audioReconfig", "getAudioVolumeAttr", "setAudioVolumeAttr"},
+    {"motionDetect",  "motionDetect", "getMotionDetectAttr", "setMotionDetectAttr"},
+    {"audioDetect",   "audioDetect",  "getAudioDetectAttr",  "setAudioDetectAttr"},
+    {"account",       "account",     "getUserPwd",     "setUserPwd"},
+    {"clock",         "setTimeAttr", "getTimeAttr", "setTimeAttr"},
+    {"maintenance",   "maintenance", "getAutoRebootAttr", "setAutoRebootAttr"},
+};
+
+const PanelCmdSpec* panelCmdSpec(const QString& key)
+{
+    for (const PanelCmdSpec& s : kPanelCmds) {
+        if (key == QLatin1String(s.key))
+            return &s;
+    }
+    return nullptr;
 }
 } // namespace
 
@@ -44,6 +84,13 @@ void BatchSettingsTask::start(const QVariantList& devices, const QVariantList& i
         return;
 
     m_finishedCount = 0;
+
+    // 请求体数据源：other_settings.json——面板保存时已按协议格式写入
+    // （{协议名: {"switch", "payload"}}），下发的 payload 与文件里的一模一样；
+    // 文件不存在/内容损坏时全部按 GET（读设备当前配置）处理
+    const QJsonObject fileRoot = QJsonDocument::fromJson(
+        ConfigureManager::instance()->loadOtherSettingsValues().toUtf8()).object();
+
     for (const QVariant& devVar : devices) {
         const QVariantMap dev = devVar.toMap();
         const QString key = dev.value("uid").toString();
@@ -53,21 +100,36 @@ void BatchSettingsTask::start(const QVariantList& devices, const QVariantList& i
 
         Runner runner;
         runner.key = key;
-        // 设备 map 可携带专属 items（网络设置按设备分配空闲 IP时逐台定制），未携带则共用全局列表
-        const QVariantList devItems = dev.contains("items") ? dev.value("items").toList() : items;
-        for (const QVariant& itemVar : devItems) {
+        for (const QVariant& itemVar : items) {
             const QVariantMap item = itemVar.toMap();
             ItemSpec spec;
             spec.key = item.value("key").toString();
             spec.name = item.value("name").toString();
             spec.action = item.value("action").toString();
-            spec.urlTemplate = item.value("url").toString();
-            spec.url = spec.urlTemplate.arg(ip); // %1 = 设备 IP
-            spec.newIp = item.value("newIp").toString();
-            spec.body = item.value("body").toString().toUtf8();
             spec.restartAfter = isRestartKey(spec.key);
-            if (spec.key.isEmpty() || spec.url.isEmpty())
-                continue;
+
+            const PanelCmdSpec* cs = panelCmdSpec(spec.key);
+            if (!cs)
+                continue; // 无指令映射的面板（language 等）：不下发
+
+            spec.urlTemplate = QLatin1String(kUrlTemplate);
+            spec.url = spec.urlTemplate.arg(ip); // %1 = 设备 IP
+
+            const QJsonObject entry = fileRoot.value(QLatin1String(cs->cmd)).toObject();
+            QJsonObject body;
+            if (!entry.isEmpty()) {
+                // 面板保存过：POST，payload 为文件里该面板的 payload 对象原样
+                body.insert("cmd", QLatin1String(cs->setCmd));
+                body.insert("payload", entry.value("payload"));
+                // 网络设置成功后设备切到保存的 IP：该设备后续设置项的 URL 重填为新 IP
+                if (spec.key == QLatin1String("network"))
+                    spec.newIp = entry.value("payload").toObject().value("ip").toString();
+            } else {
+                // 面板没保存过：GET 读设备当前配置（同样带 {"cmd": "getXxx"} 包体）
+                body.insert("cmd", QLatin1String(cs->getCmd));
+                spec.isGet = true;
+            }
+            spec.body = QJsonDocument(body).toJson(QJsonDocument::Compact);
             runner.items.append(spec);
         }
         if (runner.items.isEmpty())
@@ -87,8 +149,18 @@ void BatchSettingsTask::start(const QVariantList& devices, const QVariantList& i
             if (!runner || runner->cur >= runner->items.size() || runner->items[runner->cur].key != itemKey)
                 return; // 过期/无关响应
 
+            const ItemSpec& spec = runner->items[runner->cur];
+            // 响应日志：设备 uid、指令名、HTTP 返回结果（失败时打印错误信息）
+            {
+                const QString cmd = QJsonDocument::fromJson(spec.body).object().value("cmd").toString();
+                const QString result = data.responseType() == RequestMessageData::ResponseType::eSuccess
+                        ? QString::fromUtf8(data.responseData())
+                        : QString::fromUtf8(data.errorMessage());
+                qDebug().noquote() << QString("[%1 - 响应] cmd=%2 结果=%3")
+                                          .arg(deviceKey, cmd, result);
+            }
+
             if (data.responseType() == RequestMessageData::ResponseType::eSuccess) {
-                const ItemSpec& spec = runner->items[runner->cur];
                 emit deviceProgress(deviceKey, spec.action, eSuccess);
                 emit itemResult(deviceKey, itemKey, spec.name, true);
                 // 网络设置成功：设备已切到 newIp，该设备后续设置项的 URL 重填为新 IP
@@ -111,6 +183,7 @@ void BatchSettingsTask::start(const QVariantList& devices, const QVariantList& i
                     runner->retryTimer->start();
                 } else {
                     // 两次尝试均失败：跳过，继续下一设置项
+                    qDebug() << "twice failed, skip" << deviceKey << itemKey;
                     emit deviceProgress(deviceKey, runner->items[runner->cur].action, eSkipped);
                     emit itemResult(deviceKey, itemKey, runner->items[runner->cur].name, false);
                     advance(*runner);
@@ -179,12 +252,19 @@ void BatchSettingsTask::sendCurrent(Runner& runner)
     RequestMessageData data;
     data.reset();
     data.setRequest(requestObj);
-    // 有请求体走 POST(JSON)，无请求体（面板没保存过参数）走 GET
-    data.setRequestType(spec.body.isEmpty() ? RequestMessageData::RequestType::eGetType : RequestMessageData::RequestType::ePostType);
-    if (!spec.body.isEmpty())
-        data.setSendData(spec.body);
+    // ipcParams 协议：GET（读设备当前配置）也带 {"cmd": "getXxx"} JSON 包体，
+    // POST 带 {"cmd": "setXxx", "payload": {...}}（payload 为 other_settings.json 里的 payload 原样）
+    data.setRequestType(spec.isGet ? RequestMessageData::RequestType::eGetType : RequestMessageData::RequestType::ePostType);
+    data.setSendData(spec.body);
     data.setRequestIntervel(kRequestIntervalMs);
     data.setCustomMessage(QString("%1|%2").arg(runner.key).arg(spec.key));
+
+    // 发送日志：设备 uid/IP、指令名、完整 JSON 包体
+    {
+        const QString cmd = QJsonDocument::fromJson(spec.body).object().value("cmd").toString();
+        qDebug().noquote() << QString("[设备 - %1 - %2] >>> 发送指令为 %3  发送数据为 json=%4")
+                                  .arg(runner.key, QUrl(spec.url).host(), cmd, QString::fromUtf8(spec.body));
+    }
     runner.request->startRequest(data);
 }
 

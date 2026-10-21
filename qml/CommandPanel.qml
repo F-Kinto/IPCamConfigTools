@@ -167,26 +167,8 @@ ColumnLayout {
                 panel.batchNewIps[devs[k]["uid"]] = networkIp;
         }
 
-        // 网络设置：给 network 项补 newIp（面板保存的 IP）——该项成功后设备切到
-        // 新 IP，调度器把该设备后续项 URL 切到新 IP；多台时各设备共用面板保存的同一 IP
-        if (hasNetwork && networkIp !== "") {
-            var withNewIp = [];
-            for (var n = 0; n < items.length; n++) {
-                var it = items[n];
-                if (it["key"] === "network") {
-                    it = {
-                        "key": it["key"],
-                        "name": it["name"],
-                        "action": it["action"],
-                        "url": it["url"],
-                        "body": it["body"],
-                        "newIp": networkIp
-                    };
-                }
-                withNewIp.push(it);
-            }
-            items = withNewIp;
-        }
+        // 网络设置项的 newIp（设备切 IP 后续填 URL）由 BatchSettingsTask（C++）从
+        // other_settings.json 里保存的 IP 取，QML 不再组装
 
         panel.batchRows = rows;
         panel.batchRunning = true;

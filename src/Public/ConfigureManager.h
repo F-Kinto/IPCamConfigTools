@@ -34,7 +34,6 @@ class ConfigureManager : public QObject {
     Q_INVOKABLE static qint64 getCurrentMSecsSinceEpoch();
     Q_INVOKABLE static QString getMACAddrFirst(); //(保留旧的代码逻辑) 网卡列表中，获取使用中的第一张的MAC地址
     Q_INVOKABLE static QString getDeviceUrl(const EnumNameSpace::DeviceQuestUrl& cmd);
-    Q_INVOKABLE static QString getDeviceSetUrl(int cmd);
 
     Q_INVOKABLE void loadConfigureFile(const QString& configureFilePath);
 

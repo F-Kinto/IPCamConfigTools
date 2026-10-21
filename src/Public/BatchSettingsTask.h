@@ -57,17 +57,16 @@ class COMMON_EXPORT BatchSettingsTask : public QObject {
 
     /**
      * @brief 启动批量下发
-     * @param devices 设备列表 [{uid, ip, items?}]（uid 即 deviceKey，响应靠它路由）
-     *                - 可选 items：该设备专属设置项列表（结构同下方 items）；
-     *                  携带时仅用它（批量多台各分配空闲 IP 时，网络设置项的
-     *                  body/newIp 按设备定制），未携带时共用全局 items
-     * @param items   设置项列表（按界面勾选顺序）[{key, name, action, url, body, newIp?}]
+     * @param devices 设备列表 [{uid, ip}]（uid 即 deviceKey，响应靠它路由）
+     * @param items   设置项列表（按界面勾选顺序）[{key, name, action}]
      *                - key/name: 界面标识与显示名（结果详情用）
      *                - action: 动作名（进度提示文本用，如"以太网"）
-     *                - url: 含 %1 的 URL 模板（%1 用设备 IP 填充）
-     *                - body: POST JSON 请求体；为空串则改发 GET
-     *                - newIp: 网络设置项专用：该项设置成功后设备切到此 IP，
-     *                  该设备后续设置项的 URL 自动重填为新 IP
+     *
+     * URL 与 JSON 请求体全部在本类（C++ 侧）从 other_settings.json 组装：
+     * 统一接口 http://<设备IP>/goform/ipcParams——面板保存过（文件里有该协议条目）发
+     * POST {"cmd": "setXxx", "payload": {文件里的 payload 原样}}；没保存过发 GET
+     * {"cmd": "getXxx"}。网络设置成功后设备切到保存的 IP，该设备后续设置项的 URL
+     * 自动重填为新 IP。
      */
     Q_INVOKABLE void start(const QVariantList& devices, const QVariantList& items);
 
@@ -94,15 +93,16 @@ class COMMON_EXPORT BatchSettingsTask : public QObject {
   private:
     explicit BatchSettingsTask(QObject* parent = nullptr);
 
-    // 单个设置项描述（构造时已把 URL 模板按设备 IP 填好）
+    // 单个设置项描述（URL 与 JSON 请求体均在 start 时由 C++ 从 other_settings.json 组装）
     struct ItemSpec {
         QString key;
         QString name;
         QString action;
-        QString urlTemplate; // 含 %1 的原始模板（网络设置成功切 IP 后可重填）
+        QString urlTemplate; // http://%1/goform/ipcParams（%1 = 设备 IP）
         QString url;         // 已按设备当前 IP 填好
-        QString newIp;       // 网络设置项专用：该项成功后设备切到此 IP
-        QByteArray body;
+        QString newIp;       // 网络设置项专用：该项成功后设备切到此 IP（保存的 IP）
+        QByteArray body;     // JSON 请求体（GET 也带 {"cmd": "getXxx"} 包体）
+        bool isGet = false;  // true=GET（读设备当前配置），false=POST(JSON)
         bool restartAfter = false; // 该项成功后设备需重启进程生效（等 25 秒再发下一项）
     };
 

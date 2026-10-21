@@ -76,7 +76,6 @@ void AsynRequest::slotsTimeOut()
         m_currentQuestMessage.setHttpMultPart(nullptr); // QSharedPointer 释放引用，自定义删除器自动 deleteLater
     }
     m_timer->stop();
-    qWarning() << "URL is :" << m_currentQuestMessage.request().url().toString() << "send data time out";
     m_currentQuestMessage.setErrorMessage(QString("send data time out.").toLatin1());
     m_currentQuestMessage.setResponseType(RequestMessageData::ResponseType::eFail);
     emit signalResponseRequest(m_currentQuestMessage);

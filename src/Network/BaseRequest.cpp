@@ -86,7 +86,12 @@ bool BaseRequest::requestOnePack()
 
     switch (m_currentQuestMessage.requestType()) {
         case RequestMessageData::RequestType::eGetType:
-            reply = mgr->get(m_currentQuestMessage.request());
+            // 带请求体的 GET（ipcParams 协议：GET 也发 {"cmd": "getXxx"} JSON 包体）走
+            // sendCustomRequest；无包体保持原 get()，fetchRtspCredential 等既有调用不受影响
+            if (m_currentQuestMessage.GetSendData().isEmpty())
+                reply = mgr->get(m_currentQuestMessage.request());
+            else
+                reply = mgr->sendCustomRequest(m_currentQuestMessage.request(), "GET", m_currentQuestMessage.GetSendData());
             break;
         case RequestMessageData::RequestType::ePostType:
             reply = mgr->post(m_currentQuestMessage.request(), m_currentQuestMessage.GetSendData());

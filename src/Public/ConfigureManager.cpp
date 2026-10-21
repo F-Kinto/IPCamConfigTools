@@ -217,43 +217,6 @@ QString ConfigureManager::getDeviceUrl(const EnumNameSpace::DeviceQuestUrl& cmd)
     }
 }
 
-QString ConfigureManager::getDeviceSetUrl(int cmd)
-{
-    // URL 模板：%1 占位为设备 IP，调用方用 .arg(ip) 替换
-    // TODO: 设置类接口路径暂按设备 goform 风格占位，待固件协议确认后修正 singleCMD 指令名
-    // 参数用 int：枚举类型未注册进 QML 元对象系统，QML 侧按 GlobalEnum.h 的枚举值传 int（未知值落 default 返回空串）
-    switch (static_cast<EnumNameSpace::DeviceSetUrl>(cmd)) {
-        case EnumNameSpace::DeviceSetUrl::eSetNetwork:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_eth0&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetGb28181:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_gb28181&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetVideoCapture:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_videoCapture&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetOsd:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_Osd&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetVideoEncode:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_videoEncode&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetAudioEncode:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_audioEncode&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetAudioReconfig:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_audioReconfig&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetMotionDetect:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_motionDetect&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetAudioDetect:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_audioDetect&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetAccount:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_account&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetClock:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_clock&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetMaintenance:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_maintenance&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        case EnumNameSpace::DeviceSetUrl::eSetLanguage:
-            return "http://%1/goform/setOtherSetttings?singleCMD=set_language&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
-        default:
-            return "";
-    }
-}
-
 QString ConfigureManager::settingFilePath() const
 {
     return m_settingFilePath;

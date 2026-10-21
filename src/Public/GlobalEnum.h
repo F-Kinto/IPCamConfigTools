@@ -25,23 +25,4 @@ enum class DeviceQuestUrl {
     eGetRtspInfoUrl,       // http://%1/goform/getOtherSetttings?singleCMD=RtspConf&userid=admin&userkey=0192023a7bbd73250516f069df18b500
 };
 
-// 设备 HTTP 设置接口 URL 模板（%1 = 设备 IP）
-// 与 OtherSettingsDialog 的子节点 key 一一对应，顺序同界面分组顺序
-// TODO: 设置类接口路径暂按设备 goform 风格占位，待固件协议确认后修正 singleCMD 指令名
-enum class DeviceSetUrl {
-    eSetNetwork = 0,     // 网络设置（以太网） -> network
-    eSetGb28181,         // 28181接入设置 -> gb28181
-    eSetVideoCapture,    // 视频采集设置 -> videoCapture
-    eSetOsd,             // OSD设置 -> timeTitle
-    eSetVideoEncode,     // 视频编码 -> videoEncode
-    eSetAudioEncode,     // 音频编码 -> audioEncode
-    eSetAudioReconfig,   // 音量配置 -> audioReconfig
-    eSetMotionDetect,    // 移动侦测 -> motionDetect
-    eSetAudioDetect,     // 声音侦测 -> audioDetect
-    eSetAccount,         // 账号管理 -> account
-    eSetClock,           // 时钟设置 -> clock
-    eSetMaintenance,     // 定期维护 -> maintenance
-    eSetLanguage         // 设备语言 -> language
-};
-
 } // namespace EnumNameSpace

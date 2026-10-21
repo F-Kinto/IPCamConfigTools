@@ -438,7 +438,7 @@ Dialog {
     }
 
     // ===== "执行修改（配置其他参数）"：按勾选子节点构造下发序列 =====
-    // 子节点 key -> 动作名（遮罩进度提示用），与 GlobalEnum DeviceSetUrl 枚举一一对应
+    // 子节点 key -> 动作名（遮罩进度提示用）
     function batchActionName(key) {
         var map = {
             "network": qsTr("以太网"),
@@ -458,30 +458,10 @@ Dialog {
         return map[key] || key;
     }
 
-    // 子节点 key -> 设备设置接口 URL 模板（含 %1 设备 IP 占位）
-    // 枚举值须与 GlobalEnum.h 的 DeviceSetUrl 保持一致
-    function batchUrl(key) {
-        var cmdMap = {
-            "network": 0,
-            "gb28181": 1,
-            "videoCapture": 2,
-            "timeTitle": 3,
-            "videoEncode": 4,
-            "audioEncode": 5,
-            "audioReconfig": 6,
-            "motionDetect": 7,
-            "audioDetect": 8,
-            "account": 9,
-            "clock": 10,
-            "maintenance": 11,
-            "language": 12
-        };
-        return ConfigureManager.getDeviceSetUrl(cmdMap[key] === undefined ? -1 : cmdMap[key]);
-    }
-
     // 按 groups 顺序收集勾选的子节点，构造下发给 BatchSettingsTask 的设置项序列：
-    // [{key, name, action, url, body}]
-    // - body 由 bodyForDevice 组装（协议映射面板为 {"switch", "payload"} 格式），没保存过则为空串（发 GET）
+    // [{key, name, action}]——URL/请求方法/JSON 包体全部由 BatchSettingsTask（C++）从
+    // other_settings.json 组装：保存过 → POST {"cmd": "setXXX", "payload": {...}}，
+    // 没保存过 → GET {"cmd": "getXXX"}；无协议映射的面板（language 等没有指令名）C++ 侧跳过
     function buildBatchItems() {
         var items = [];
         for (var g = 0; g < root.groups.length; g++) {
@@ -491,48 +471,18 @@ Dialog {
                 if (!root.isChecked(key))
                     continue;
 
-                var url = root.batchUrl(key);
-                if (url === "")
+                if (root.protocolMaps[key] === undefined)
                     continue;
 
-                var saved = root.savedPanelValues[key];
                 items.push({
                     "key": key,
                     "name": list[i].name,
-                    "action": root.batchActionName(key),
-                    "url": url,
-                    "body": root.bodyForDevice(key)
+                    "action": root.batchActionName(key)
                 });
-                console.log("buildBatchItems: key=" + key + ", name=" + list[i].name + ", url=" + url + ", body=" + items[items.length - 1].body);
+                console.log("buildBatchItems: key=" + key + ", name=" + list[i].name);
             }
         }
         return items;
-    }
-
-    // 下发设备用的请求体，与 other_settings.json 的面板格式完全一致：
-    // - 有协议映射的面板：{"switch": 面板勾选状态, "payload": {协议字段: 控件值}}（protocolPayload 组装）
-    // - 其余面板：本地配置表按控件 objectName 存键（可读稳定），设备协议沿用位置索引——
-    //   逐条用记录里的 p（位置索引）还原位置键，旧记录（键本身是位置键）直接用键；每条只发 {k, v}
-    function bodyForDevice(key) {
-        var saved = root.savedPanelValues[key];
-        if (saved === undefined)
-            return "";
-        var pm = root.protocolMaps[key];
-        if (pm !== undefined) {
-            return JSON.stringify({
-                "switch": root.isChecked(key) ? "checked" : "none",
-                "payload": root.protocolPayload(key, saved)
-            });
-        }
-        var out = {};
-        for (var k in saved) {
-            var rec = saved[k];
-            out[typeof rec.p === "string" ? rec.p : k] = {
-                "k": rec.k,
-                "v": rec.v
-            };
-        }
-        return JSON.stringify(out);
     }
 
     // 已保存的网络设置 IP 地址
