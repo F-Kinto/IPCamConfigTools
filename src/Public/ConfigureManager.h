@@ -21,9 +21,11 @@ class ConfigureManager : public QObject {
     Q_PROPERTY(QString settingFilePath READ settingFilePath NOTIFY settingFilePathChanged)
     Q_PROPERTY(int languageType READ languageType WRITE setLanguageType NOTIFY languageTypeChanged)
     Q_PROPERTY(bool hasSetLanguage READ isHasSetLanguage NOTIFY languageTypeChanged)
-    // 上次选择的网卡名（持久化到本地 ini，选中“所有网卡”时写入 "All netCard"）
+    // 搜索时长（秒），与"系统配置 - 搜索时间(秒)"联动，默认 5
+    Q_PROPERTY(int searchSeconds READ searchSeconds WRITE setSearchSeconds NOTIFY searchSecondsChanged)
+    // 上次选择的网卡名（持久化到本地 ini，选中"所有网卡"时写入 "All netCard"）
     Q_PROPERTY(QString networkCard READ networkCard WRITE setNetworkCard NOTIFY networkCardChanged)
-    // 上次打开“升级文件”选择框时所在的目录（持久化到本地 ini，供下次打开时默认定位）
+    // 上次打开"升级文件"选择框时所在的目录（持久化到本地 ini，供下次打开时默认定位）
     Q_PROPERTY(QString upgradeDir READ upgradeDir WRITE setUpgradeDir NOTIFY upgradeDirChanged)
 
   public:
@@ -44,10 +46,14 @@ class ConfigureManager : public QObject {
     Q_INVOKABLE int  languageType() const;
     Q_INVOKABLE void setLanguageType(int type);
 
+    // 搜索时长（秒，持久化到 QSettings，默认 5）
+    Q_INVOKABLE int  searchSeconds() const;
+    Q_INVOKABLE void setSearchSeconds(int seconds);
+
     // 网卡名称（持久化到本地 ini 配置文件）
     // 配置文件路径：程序目录下 config.ini，程序目录不可写时回退到系统配置目录
     Q_INVOKABLE QString networkCardConfigPath() const;
-    // 选中“所有网卡”时写入配置文件的固定内容
+    // 选中"所有网卡"时写入配置文件的固定内容
     Q_INVOKABLE QString defaultNetworkCard() const;
 
     QString networkCard() const;
@@ -66,6 +72,7 @@ class ConfigureManager : public QObject {
   signals:
     void settingFilePathChanged();
     void languageTypeChanged();
+    void searchSecondsChanged();
     void networkCardChanged();
     void upgradeDirChanged();
 

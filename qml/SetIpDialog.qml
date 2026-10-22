@@ -175,7 +175,7 @@ AppContentDialog {
             Layout.preferredHeight: root.ctrlH
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignLeft
-            text: qsTr("IP")
+            text: "IP"
         }
 
         IpInput {

@@ -18,6 +18,8 @@
 
 // 语言设置键
 constexpr char LanguageSetting[] = "AppSettings/Language";
+// 搜索时长（秒）设置键
+constexpr char SearchTimeSetting[] = "AppSettings/SearchTime";
 // 网卡设置键
 constexpr char NetworkCardSetting[] = "AppSettings/NetworkCard";
 // 选中“所有网卡”时写入配置文件的内容
@@ -224,23 +226,41 @@ QString ConfigureManager::settingFilePath() const
 
 bool ConfigureManager::isHasSetLanguage() const
 {
-    QSettings settings;
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
     return settings.contains(LanguageSetting);
 }
 
 int ConfigureManager::languageType() const
 {
-    QSettings settings;
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
     return settings.value(LanguageSetting, static_cast<int>(EnumNameSpace::LanguageType::eEnglish)).toInt();
 }
 
 void ConfigureManager::setLanguageType(int type)
 {
-    QSettings settings;
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
     if (settings.value(LanguageSetting, -1).toInt() == type)
         return;
     settings.setValue(LanguageSetting, type);
+    // 立即落盘：程序重启时 TranslatorManager 按此值加载翻译 qm
+    settings.sync();
     emit languageTypeChanged();
+}
+
+int ConfigureManager::searchSeconds() const
+{
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
+    return settings.value(SearchTimeSetting, 5).toInt();
+}
+
+void ConfigureManager::setSearchSeconds(int seconds)
+{
+    QSettings settings(networkCardConfigPath(), QSettings::IniFormat);
+    if (settings.value(SearchTimeSetting, 5).toInt() == seconds)
+        return;
+    settings.setValue(SearchTimeSetting, seconds);
+    settings.sync();
+    emit searchSecondsChanged();
 }
 
 QString ConfigureManager::networkCardConfigPath() const

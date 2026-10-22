@@ -64,7 +64,7 @@ Item {
 
         // 以输入框为定位父项：弹窗始终出现在输入框正下方，不遮挡输入框内容
         parent: tpField
-        x: 0
+        x: -(tpPopup.width - parent.width) / 2
         y: tpField.height + ScreenTools.scaleNum(4)
         modal: true
         dim: false

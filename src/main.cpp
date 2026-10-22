@@ -95,6 +95,10 @@ int main(int argc, char* argv[]) {
     // 内部走 Live555 收流 + FFmpeg 解码（同步自 VmsTools，固定 RTSP 单路）
     qmlRegisterType<RtspVideoItem>("IPCam.Rtsp", 1, 0, "RtspVideoItem");
 
+    // 界面语言初始化必须在 QML 加载前完成：安装翻译器后再创建 QML，
+    // 组件树创建时 qsTr 直接按译文求值，避免先按源文本创建再依赖 retranslate 刷新
+    TranslatorManager::instance()->initSystemDefaultLanguage();
+
     const QUrl url(QStringLiteral("qrc:/qml/main.qml"));
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreated, &app,

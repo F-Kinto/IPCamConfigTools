@@ -192,6 +192,7 @@ AppContentDialog {
             Layout.preferredHeight: root.ctrlH
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignRight
+            wrapMode: Text.Wrap
             text: qsTr("标题内容（多行用^分隔）")
         }
 

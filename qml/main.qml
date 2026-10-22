@@ -14,13 +14,13 @@ ApplicationWindow {
     id: root
 
     // 表格列标题（共 8 列，默认可视区域只显示前 6 列，其余需拖动底部水平滚动条）
-    property var tableTitles: [qsTr("IP地址"), qsTr("UID"), qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("设备类型")]
+    property var tableTitles: [qsTr("IP地址"), "UID", qsTr("状态信息"), qsTr("升级当前版本号"), qsTr("升级后版本号"), qsTr("OSD标题"), qsTr("物理地址"), qsTr("设备类型")]
     // 是否允许鼠标拖拽表头分割线调整列宽
     property bool tableResizable: true
     // 列宽模式
     property bool tableStretchToFill: false
     // 固定列宽（tableStretchToFill 为 false 时生效）
-    property var tableFixedWidths: [ScreenTools.scaleNum(150), ScreenTools.scaleNum(190), ScreenTools.scaleNum(130), ScreenTools.scaleNum(193), ScreenTools.scaleNum(193), ScreenTools.scaleNum(130), ScreenTools.scaleNum(150), ScreenTools.scaleNum(120)]
+    property var tableFixedWidths: [ScreenTools.scaleNum(150), ScreenTools.scaleNum(190), ScreenTools.scaleNum(140), ScreenTools.scaleNum(193), ScreenTools.scaleNum(193), ScreenTools.scaleNum(130), ScreenTools.scaleNum(150), ScreenTools.scaleNum(120)]
     // 拉伸权重（tableStretchToFill 为 true 时生效）
     property var tableStretchFactors: [1.1, 1.6, 1.1, 1.3, 1.3, 1.1, 1.2, 1.1]
     // 统一控件高度
@@ -30,13 +30,13 @@ ApplicationWindow {
         "family": "Microsoft YaHei",
         "pointSize": ScreenTools.scaleNum(10, true)
     })
-    // 已勾选设备的行号（由“全选 / 反选”维护）
+    // 已勾选设备的行号（由"全选 / 反选"维护）
     property var selectedRows: []
     readonly property int selectedCount: selectedRows.length
     // 设备搜索中：按钮禁用、结束后由 DeviceScanner.searchFinished 复位
     property bool searching: false
-    // 搜索时长（秒），与“系统配置 - 搜索时间(秒)”联动
-    property int searchSeconds: 5
+    // 搜索时长（秒），与"系统配置 - 搜索时间(秒)"联动
+    property int searchSeconds: ConfigureManager.searchSeconds
     // ===== 页签（设备列表 / 直播预览）=====
     // 直播预览页是否已打开（关闭后页签栏整体隐藏，设备列表填满）
     property bool previewOpen: false
@@ -51,11 +51,11 @@ ApplicationWindow {
     property bool sidePanelsHidden: false
     // 固件升级：已选择的升级文件（本地路径列表，*.bin，可多选）
     property var upgradeFiles: []
-    // 上次打开“升级文件”选择框时所在的目录（由 ConfigureManager 持久化到 ini）
+    // 上次打开"升级文件"选择框时所在的目录（由 ConfigureManager 持久化到 ini）
     readonly property string lastUpgradeDir: ConfigureManager.upgradeDir
     // 网卡信息列表（ScreenTools::getNetworkInterfaces() 的返回值，已过滤为 ipconfig 可见项）
     property var nicList: []
-    // 网卡下拉框数据：第一项固定“所有网卡”，之后为各网卡
+    // 网卡下拉框数据：第一项固定"所有网卡"，之后为各网卡
     // 显示格式 "[ip] [网卡名称]"（如 "192.168.5.100 Realtek PCIe GBE Family Controller"）：
     // 该项只用于展示，写入配置文件与启动时匹配都只用网卡名称（displayName）
     readonly property var nicModel: [{
@@ -72,7 +72,7 @@ ApplicationWindow {
     // 直播模式开关（两套逻辑二选一）：
     // false = 多路模式：最多 maxLiveCount 路同时播放
     // true  = 单路模式
-    property bool singleLiveMode: true
+    property bool singleLiveMode: false
     // 主码流播放（顶部工具栏勾选状态，默认不勾选）：起流 URL 用 ch00_0（主码流）/ ch00_1（子码流）
     property bool mainStreamPlay: false
     // 直播中锁定设备列表页的提示文案（按钮/输入框/下拉框/勾选/双击全禁用时弹出）
@@ -87,9 +87,9 @@ ApplicationWindow {
         root.restoreNicSelection();
     }
 
-    // 当前选中的网卡信息，选中“所有网卡”时为 null
+    // 当前选中的网卡信息，选中"所有网卡"时为 null
     function currentNic() {
-        // 下拉框第 0 项是“所有网卡”，真实网卡从下标 1 开始
+        // 下拉框第 0 项是"所有网卡"，真实网卡从下标 1 开始
         var idx = nicCombo.currentIndex - 1;
         if (idx < 0 || idx >= root.nicList.length)
             return null;
@@ -109,7 +109,7 @@ ApplicationWindow {
         root.logAction("当前使用的网卡: " + (cur ? cur["displayName"] : "所有网卡"));
     }
 
-    // 按配置文件中保存的网卡名匹配；匹配不到（含“All netCard”）则选中第一项“所有网卡”
+    // 按配置文件中保存的网卡名匹配；匹配不到（含"All netCard"）则选中第一项"所有网卡"
     function restoreNicSelection() {
         var saved = ConfigureManager.networkCard;
         var target = 0;
@@ -122,7 +122,7 @@ ApplicationWindow {
         nicCombo.currentIndex = target;
     }
 
-    // 用户改动选择后写入本地配置文件：选中“所有网卡”时写入 "All netCard"
+    // 用户改动选择后写入本地配置文件：选中"所有网卡"时写入 "All netCard"
     function saveNicSelection() {
         var nic = root.currentNic();
         ConfigureManager.networkCard = nic ? (nic["displayName"] || ConfigureManager.defaultNetworkCard()) : ConfigureManager.defaultNetworkCard();
@@ -145,7 +145,7 @@ ApplicationWindow {
         selectedRows = list;
     }
 
-    // 表格排序后行号重排：按 DeviceTable 给出的“旧行号 -> 新行号”映射同步已选行
+    // 表格排序后行号重排：按 DeviceTable 给出的"旧行号 -> 新行号"映射同步已选行
     function remapSelectedRows(indexMap) {
         var list = [];
         for (var i = 0; i < root.selectedRows.length; i++) {
@@ -157,9 +157,9 @@ ApplicationWindow {
         root.selectedRows = list;
     }
 
-    // 表格里某一行的复选框勾选/取消：同步进 selectedRows，“已选数量”与“请先选择设备”的校验都读这份数据，自动保持一致
+    // 表格里某一行的复选框勾选/取消：同步进 selectedRows，"已选数量"与"请先选择设备"的校验都读这份数据，自动保持一致
     function setRowChecked(row, checked) {
-        // 直播中锁定勾选：关闭直播前不允许变更“已选设备”
+        // 直播中锁定勾选：关闭直播前不允许变更"已选设备"
         if (root.previewOpen) {
             appToast.show(root.liveLockTip);
             return ;
@@ -187,7 +187,7 @@ ApplicationWindow {
     }
 
     // 批量设置网络成功后：设备已切到设置的 IP，设备列表 IP 栏与勾选数据同步更新
-    // （keyOf 口径与“执行修改”一致：uid -> mac -> ip）
+    // （keyOf 口径与"执行修改"一致：uid -> mac -> ip）
     function updateDeviceIp(deviceKey, newIp) {
         for (var i = 0; i < deviceModel.rowCount; i++) {
             var dev = deviceModel.getRow(i);
@@ -233,7 +233,7 @@ ApplicationWindow {
         return list;
     }
 
-    // 打开直播预览页：以已勾选设备为播放列表，切到“直播预览”页签。。
+    // 打开直播预览页：以已勾选设备为播放列表，切到"直播预览"页签。。
     function openLivePreview() {
         var checked = DeviceManager.checkedDevices();
         // 播放前把缓存的 RTSP 凭据合并进来（设备发现时已预取，第一次起流即带真实凭据）
@@ -278,7 +278,7 @@ ApplicationWindow {
     }
 
     // 双击表格某行：直接播放该行设备
-    // 合并后超过“最多 4 路”上限时弹窗提示，播放列表保持原样
+    // 合并后超过"最多 4 路"上限时弹窗提示，播放列表保持原样
     function openLivePreviewOfRow(row) {
         if (row < 0 || row >= deviceModel.rowCount)
             return ;
@@ -295,7 +295,7 @@ ApplicationWindow {
             root.logAction("双击播放被拦截: 直播中锁定设备列表");
             return ;
         }
-        // 单路模式：直播中双击“当前在播的那台”是跳转查看（不改变直播状态，
+        // 单路模式：直播中双击"当前在播的那台"是跳转查看（不改变直播状态，
         // 保留切页）；双击其他设备属于换台，需先关闭直播，弹 toast 禁止
         if (root.singleLiveMode) {
             var curDev = root.previewOpen && livePreviewPage.devices.length > 0 ? livePreviewPage.devices[0] : null;
@@ -371,7 +371,7 @@ ApplicationWindow {
     }
 
     // ===== 操作日志 =====
-    // 从调用栈里取“调用 logAction 的那一层”的位置（第 0 帧是 logAction 自身）
+    // 从调用栈里取"调用 logAction 的那一层"的位置（第 0 帧是 logAction 自身）
     function callerLocation() {
         var stack = "";
         try {
@@ -436,9 +436,9 @@ ApplicationWindow {
         if (root.searching)
             return ;
 
-        // 选中“所有网卡”时为 null，传空串表示不限制网段
+        // 选中"所有网卡"时为 null，传空串表示不限制网段
         var nic = root.currentNic();
-        // WifiBroadcast 按“可读名 / 网卡名 / 网卡 IPv4”匹配网卡，优先传可读名
+        // WifiBroadcast 按"可读名 / 网卡名 / 网卡 IPv4"匹配网卡，优先传可读名
         var nicName = nic ? (nic["humanReadableName"] || nic["displayName"] || "") : "";
         var ips = nic ? (nic["ipv4"] || []) : [];
         var nicDesc = nic ? (nicName + "(" + (ips.length > 0 ? ips[0] : qsTr("无IP")) + ")") : qsTr("所有网卡");
@@ -473,7 +473,7 @@ ApplicationWindow {
         return i >= 0 ? s.substring(0, i) : s;
     }
 
-    // 已选文件在“升级文件”输入框里的摘要（最多列 3 个，超出显示总数）
+    // 已选文件在"升级文件"输入框里的摘要（最多列 3 个，超出显示总数）
     function upgradeFileSummary() {
         var files = root.upgradeFiles;
         if (files.length === 0)
@@ -488,7 +488,7 @@ ApplicationWindow {
         return text;
     }
 
-    // “文件一键升级”：先校验升级文件，再校验设备，最后执行升级
+    // "文件一键升级"：先校验升级文件，再校验设备，最后执行升级
     function startFileUpgrade() {
         if (root.upgradeFiles.length === 0) {
             confirmBox.showTip(qsTr("温馨提示"), qsTr("请先选择升级文件"));
@@ -510,7 +510,7 @@ ApplicationWindow {
     minimumWidth: ScreenTools.scaleNum(600)
     minimumHeight: ScreenTools.scaleNum(450)
     visible: true
-    title: qsTr("IPC BatchTool_V1.0.0.0")
+    title: "IPC BatchTool_V1.0.0.0"
     color: "transparent"
     font.family: "Microsoft YaHei"
     font.pointSize: ScreenTools.scaleNum(10, true)
@@ -604,7 +604,7 @@ ApplicationWindow {
         target: DeviceManager
     }
 
-    // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的“当前设备”
+    // 当前选中行变化（点击表格任意位置 / 勾选时顺带选中）→ 同步 DeviceManager 里的"当前设备"
     Connections {
         function onCurrentRowChanged() {
             root.syncCurrentDevice();
@@ -612,7 +612,7 @@ ApplicationWindow {
         target: deviceTable
     }
 
-    // 直播窗口全部关闭（数量为 0）→ 自动收起“直播预览”页签
+    // 直播窗口全部关闭（数量为 0）→ 自动收起"直播预览"页签
     Connections {
         function onDevicesChanged() {
             if (root.previewOpen && livePreviewPage.devices.length === 0)
@@ -730,7 +730,7 @@ ApplicationWindow {
                 // 下拉框展示 "[ip] [网卡名称]"，取值/匹配仍用网卡名称
                 textRole: "display"
                 model: root.nicModel
-                // 默认选中第一项“所有网卡”，启动时由 restoreNicSelection() 按配置文件覆盖
+                // 默认选中第一项"所有网卡"，启动时由 restoreNicSelection() 按配置文件覆盖
                 currentIndex: 0
                 // 只在用户主动选择时写配置文件（程序自动回显不写，避免网卡临时消失时丢失配置）
                 onActivated: {
@@ -741,12 +741,11 @@ ApplicationWindow {
             }
 
             AppButton {
-                Layout.preferredWidth: ScreenTools.scaleNum(90)
+                Layout.minimumWidth: ScreenTools.scaleNum(90)
                 Layout.preferredHeight: root.controlHeight
                 Layout.fillWidth: false
                 text: qsTr("系统配置")
                 onClicked: {
-                    root.logAction("我点击了%1按钮".arg(text));
                     systemConfigDialog.open();
                 }
             }
@@ -786,7 +785,7 @@ ApplicationWindow {
                             topPadding: ScreenTools.scaleNum(4)
                             spacing: ScreenTools.scaleNum(6)
 
-                            // “设备列表”页签：不可关闭。
+                            // "设备列表"页签：不可关闭。
                             Rectangle {
                                 width: ScreenTools.scaleNum(160)
                                 height: ScreenTools.scaleNum(30)
@@ -814,7 +813,7 @@ ApplicationWindow {
 
                             }
 
-                            // “直播预览”页签：打开“播放勾选设备”后出现
+                            // "直播预览"页签：打开"播放勾选设备"后出现
                             Rectangle {
                                 width: ScreenTools.scaleNum(160)
                                 height: ScreenTools.scaleNum(30)
@@ -899,6 +898,8 @@ ApplicationWindow {
                                 titles: root.tableTitles
                                 resizable: root.tableResizable
                                 stretchToFill: root.tableStretchToFill
+                                // 固定列宽模式下最后一列（设备类型）吃掉剩余宽度，窗口最大化后表格铺满
+                                lastColumnFills: true
                                 fixedWidths: root.tableFixedWidths
                                 stretchFactors: root.tableStretchFactors
                                 headerHeight: Math.round(root.controlHeight * 1.5)
@@ -911,7 +912,7 @@ ApplicationWindow {
                                 onRowDoubleClicked: root.openLivePreviewOfRow(row)
                                 // 排序所用字段名，与下方 TableModelColumn 的 display 一一对应
                                 columnRoles: ["ip", "uid", "status", "currentVersion", "targetVersion", "osdTitle", "mac", "deviceType"]
-                                // 排序会打乱行号：按“旧行号 -> 新行号”同步已勾选设备，
+                                // 排序会打乱行号：按"旧行号 -> 新行号"同步已勾选设备，
                                 onRowsReordered: {
                                     root.remapSelectedRows(indexMap);
                                     root.syncCurrentDevice();
@@ -1063,7 +1064,7 @@ ApplicationWindow {
                     // 展示已选文件摘要；路径很长时末尾省略
                     text: root.upgradeFileSummary()
                     readOnly: true
-                    placeholderText: qsTr("请选择 .bin 升级文件（可多选）")
+                    placeholderText: qsTr("请选择 %1 升级文件（可多选）").arg(".bin")
                 }
 
                 RowLayout {
@@ -1161,9 +1162,13 @@ ApplicationWindow {
         title: qsTr("系统配置")
         width: ScreenTools.scaleNum(420)
         okText: qsTr("保存")
-        // 保存：更新搜索时间并弹“保存成功”提示（accept 触发 onAccepted）
+        // 保存：更新搜索时间并弹"保存成功"提示（accept 触发 onAccepted）
         onOkClicked: {
-            root.searchSeconds = searchTimeSpin.displayText
+            root.searchSeconds = searchTimeSpin.value
+            ConfigureManager.setSearchSeconds(searchTimeSpin.value)
+            // 界面语言写入 config.ini（AppSettings/Language），程序重启时 TranslatorManager 按其加载翻译 qm
+            // 枚举 eChinese=0、eEnglish=1 与下拉 model 顺序一致，直接存取无需映射
+            ConfigureManager.setLanguageType(sysLangCombo.currentIndex)
             root.logAction("我点击了%1按钮（系统配置）".arg(systemConfigDialog.okText))
             systemConfigDialog.accept()
         }
@@ -1171,7 +1176,7 @@ ApplicationWindow {
         onCancelClicked: {
             systemConfigDialog.reject()
         }
-        // 点击“保存”后弹出提示
+        // 点击"保存"后弹出提示
         onAccepted: confirmBox.showTip(qsTr("温馨提示"), qsTr("保存成功"))
 
         GridLayout {
@@ -1188,13 +1193,13 @@ ApplicationWindow {
 
             SpinBox {
                 id: searchTimeSpin
-                // “− / +”按钮为正方形，边长与控件高度一致
+                // "− / +"按钮为正方形，边长与控件高度一致
                 readonly property int btnW: root.controlHeight
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.controlHeight
                 from: 5
                 to: 120
-                value: 5
+                value: root.searchSeconds
                 stepSize: 1
                 editable: true
                 hoverEnabled: true
@@ -1224,7 +1229,7 @@ ApplicationWindow {
                     selectByMouse: true
                 }
 
-                // “−”按钮（左）：数值减 1 秒。
+                // "−"按钮（左）：数值减 1 秒。
                 down.indicator: Rectangle {
                     x: 1
                     y: 1
@@ -1259,7 +1264,7 @@ ApplicationWindow {
 
                 }
 
-                // “+”按钮（右）：数值加 1 秒
+                // "+"按钮（右）：数值加 1 秒
                 up.indicator: Rectangle {
                     x: searchTimeSpin.width - width - 1
                     y: 1
@@ -1309,9 +1314,12 @@ ApplicationWindow {
             }
 
             AppComboBox {
+                id: sysLangCombo
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.controlHeight
-                model: [qsTr("简体中文"), "English"]
+                // 枚举 eChinese=0、eEnglish=1 与 model 顺序一致，currentIndex 直接互存互取
+                model: ["简体中文", "English"]
+                currentIndex: ConfigureManager.languageType
             }
 
             Label {
@@ -1345,7 +1353,7 @@ ApplicationWindow {
         // 非空表示弹窗已开，showConfirm 据此防重复弹出
         property string confirmAction: ""
 
-        // 单按钮纯提示：只显示“确定”，点击仅关闭弹窗不触发任何逻辑
+        // 单按钮纯提示：只显示"确定"，点击仅关闭弹窗不触发任何逻辑
         function showTip(title, text) {
             confirmBox.confirmAction = "messageTip";
             confirmBox.twoButtons = false;
@@ -1353,7 +1361,7 @@ ApplicationWindow {
             confirmBox.show(title, text);
         }
 
-        // 两按钮确认：动作类型 + 标题/内容 + 可选按钮文本（缺省“取消|确定”）
+        // 两按钮确认：动作类型 + 标题/内容 + 可选按钮文本（缺省"取消|确定"）
         function showConfirm(action, title, text, ok, cancel) {
             if (confirmBox.confirmAction !== "")
                 return; // 已开着（防重复弹出）
@@ -1398,14 +1406,14 @@ ApplicationWindow {
     }
 
     // ===== 升级文件选择框 =====
-    // 1) 只筛 *.bin；2) 默认打开上次所在目录, 首次打开默认为“我的文档”
+    // 1) 只筛 *.bin；2) 默认打开上次所在目录, 首次打开默认为"我的文档"
     // 3) selectMultiple 支持一次选多个文件
     AppDialogs.FileDialog {
         id: upgradeFileDialog
 
         title: qsTr("请选择升级文件")
         selectMultiple: true
-        nameFilters: [qsTr("固件文件 (*.bin)"), qsTr("所有文件 (*)")]
+        nameFilters: [qsTr("固件文件 %1").arg("*.bin"), qsTr("所有文件 (*)")]
         folder: root.lastUpgradeDir !== "" ? ("file:///" + root.lastUpgradeDir.replace(/\\/g, "/")) : shortcuts.home
         onAccepted: {
             var paths = [];
@@ -1425,7 +1433,7 @@ ApplicationWindow {
     }
 
     // ===== 设定IP弹窗的探测遮罩 =====
-    // 点“确定”后异步探测 IP 占用期间，盖住整个弹窗（含标题栏与关闭按钮）并吞掉鼠标事件。
+    // 点"确定"后异步探测 IP 占用期间，盖住整个弹窗（含标题栏与关闭按钮）并吞掉鼠标事件。
     AppBusyMask {
         parent: Overlay.overlay
         anchors.centerIn: parent
@@ -1436,7 +1444,7 @@ ApplicationWindow {
         text: qsTr("正在查询IP占用状态...")
     }
 
-    // ===== OSD参数共享存储：“OSD修改”弹窗 与 “其它设置-OSD设置”页共用同一份已保存参数 =====
+    // ===== OSD参数共享存储："OSD修改"弹窗 与 "其它设置-OSD设置"页共用同一份已保存参数 =====
     QtObject {
         id: osdConfig
 
@@ -1447,7 +1455,7 @@ ApplicationWindow {
         property int titlePosIndex: 4
         property string titleContent: ""
         property bool saved: false
-        // “OSD修改”弹窗点保存时发出：其它设置弹窗监听并把这份数据按协议格式写入 other_settings.json
+        // "OSD修改"弹窗点保存时发出：其它设置弹窗监听并把这份数据按协议格式写入 other_settings.json
         // （两边共用同一个 osd 条目，重启后显示一致）
         signal osdSavedFromDialog()
     }
@@ -1458,7 +1466,7 @@ ApplicationWindow {
         sharedOsd: osdConfig
     }
 
-    // ===== 其它设置弹窗（由“配置其它参数”按钮触发） =====
+    // ===== 其它设置弹窗（由"配置其它参数"按钮触发） =====
     OtherSettingsDialog {
         id: otherSettingsDialog
         sharedOsd: osdConfig

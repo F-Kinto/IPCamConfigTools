@@ -4,8 +4,8 @@ namespace EnumNameSpace {
 
 // 界面语言类型
 enum class LanguageType {
-    eEnglish = 0, // 英文
-    eChinese,     // 简体中文
+    eChinese = 0,     // 简体中文
+    eEnglish, // 英文
 };
 
 // 应用目录类型

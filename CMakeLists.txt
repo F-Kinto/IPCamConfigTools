@@ -74,6 +74,7 @@ set(PROJECT_SOURCES
     ${NETWORK_SOURCES}
     ${RTSP_SOURCES}
     qml/qml.qrc
+    translate/translations.qrc
 )
 
 # x86 链接 FFmpeg/Live555 预编译库时，其 obj 无 SAFESEH 记录，

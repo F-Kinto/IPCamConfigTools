@@ -13,7 +13,7 @@ Dialog {
     // 统一控件高度
     readonly property int ctrlH: ScreenTools.scaleNum(28)
     // 左侧分类树宽度
-    readonly property int treeWidth: ScreenTools.scaleNum(200)
+    readonly property int treeWidth: ScreenTools.scaleNum(220)
     // 右侧面板标签列宽（容纳“最大心跳超时次数”等长标签）
     readonly property int panelLabelWidth: ScreenTools.scaleNum(120)
     // 当前选中的设置页 key（对应 groups 里子项的 key）
@@ -1111,7 +1111,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("DNS1")
+                                text: "DNS1"
                             }
 
                             IpInput {
@@ -1133,7 +1133,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("DNS2")
+                                text: "DNS2"
                             }
 
                             IpInput {
@@ -1155,7 +1155,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("DHCP")
+                                text: "DHCP"
                             }
 
                             AppComboBox {
@@ -1178,7 +1178,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("MTU")
+                                text: "MTU"
                             }
 
                             AppTextField {
@@ -1230,7 +1230,7 @@ Dialog {
             id: osdRoot
 
             // 本页标签列宽（容纳“标题内容（多行用^分隔）”长标签）
-            readonly property int osdLabelWidth: ScreenTools.scaleNum(170)
+            readonly property int osdLabelWidth: ScreenTools.scaleNum(200)
 
             // “OSD显示”为“禁用”时，除该开关所在行外，其余项全部不可编辑
             function applyEnableState() {
@@ -1257,7 +1257,9 @@ Dialog {
                 if (!s || !s.saved)
                     return ;
 
-                osdSetCheck.checked = s.setTimeTitle;
+                // 总开关 osdSetCheck 不回填：它与左侧树勾选强绑定（Binding 正向同步 checkedMap），
+                // 共享对象的 setTimeTitle 不随树勾选实时更新，用它覆盖面板开关会经
+                // onCheckedChanged 反向回写树勾选——点进面板勾选被“偷掉”的根源
                 osdEnableCombo.currentIndex = s.osdDisplayIndex;
                 osdTimeFormatCombo.currentIndex = s.timeFormatIndex;
                 osdShowWeekCheck.checked = s.showWeek;
@@ -1509,7 +1511,7 @@ Dialog {
             Label {
                 anchors.centerIn: parent
                 color: "#888888"
-                text: qsTr("该设置页待接入")
+                text: "No data"
             }
 
         }
@@ -1879,6 +1881,7 @@ Dialog {
                                     Layout.preferredHeight: root.ctrlH
                                     verticalAlignment: Text.AlignVCenter
                                     horizontalAlignment: Text.AlignRight
+                                    wrapMode: Text.WrapAnywhere
                                     text: qsTr("最大心跳超时次数")
                                 }
 
@@ -2034,7 +2037,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("亮度(0-255)")
+                                text: qsTr("亮度") + "(0-255)"
                             }
 
                             AppTextField {
@@ -2056,7 +2059,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("饱和度(0-255)")
+                                text: qsTr("饱和度") + "(0-255)"
                             }
 
                             AppTextField {
@@ -2078,7 +2081,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("锐度(0-255)")
+                                text: qsTr("锐度") + "(0-255)"
                             }
 
                             AppTextField {
@@ -2100,7 +2103,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("对比度(0-255)")
+                                text: qsTr("对比度") + "(0-255)"
                             }
 
                             AppTextField {
@@ -2122,7 +2125,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("背光(0-255)")
+                                text: qsTr("背光") + "(0-255)"
                             }
 
                             AppTextField {
@@ -2319,7 +2322,7 @@ Dialog {
             id: veRoot
 
             // 本面板列宽：标签列 / 控件列
-            readonly property int veLabelWidth: ScreenTools.scaleNum(150)
+            readonly property int veLabelWidth: ScreenTools.scaleNum(180)
             readonly property int veFieldWidth: ScreenTools.scaleNum(180)
 
             anchors.fill: parent
@@ -2412,7 +2415,7 @@ Dialog {
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
-                                model: [qsTr("H265"), qsTr("H264")]
+                                model: ["H265", "H264"]
                             }
 
                             AppComboBox {
@@ -2421,7 +2424,7 @@ Dialog {
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
-                                model: [qsTr("H265"), qsTr("H264")]
+                                model: ["H265", "H264"]
                             }
 
                         }
@@ -2455,7 +2458,7 @@ Dialog {
 
                                 Layout.preferredWidth: veRoot.veFieldWidth
                                 Layout.preferredHeight: root.ctrlH
-                                model: [qsTr("D1(720×576)"), "800×448", "704×576", "640×480", "640×360", "352×288"]
+                                model: ["D1(720×576)", "800×448", "704×576", "640×480", "640×360", "352×288"]
                                 currentIndex: 4
                             }
 
@@ -2504,7 +2507,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("帧间隔(s 1-200)")
+                                text: qsTr("帧间隔") + "(s 1-200)"
                             }
 
                             AppTextField {
@@ -2561,7 +2564,7 @@ Dialog {
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("比特率(kbps 500-8000)")
+                                text: qsTr("比特率") + "(kbps 500-8000)"
                             }
 
                             AppTextField {
@@ -2698,7 +2701,7 @@ Dialog {
                                         Layout.preferredHeight: root.ctrlH
                                         verticalAlignment: Text.AlignVCenter
                                         horizontalAlignment: Text.AlignRight
-                                        text: qsTr("BaseProfile")
+                                        text: "BaseProfile"
                                     }
 
                                     AppComboBox {
@@ -2898,7 +2901,7 @@ Dialog {
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(180)
                                 Layout.preferredHeight: root.ctrlH
-                                model: [qsTr("G711"), qsTr("AAC")]
+                                model: ["G711", "AAC"]
                                 onActivated: aeSampleCombo.currentIndex = 0
                             }
 
@@ -3042,7 +3045,7 @@ Dialog {
                                 id: arCaptureCheck
                                 objectName: "arCaptureCheck"
 
-                                text: qsTr("采集音量(1-100)")
+                                text: qsTr("采集音量") + "(1-100)"
                             }
 
                             AppTextField {
@@ -3078,7 +3081,7 @@ Dialog {
                                 id: arPlayCheck
                                 objectName: "arPlayCheck"
 
-                                text: qsTr("播放音量(1-100)")
+                                text: qsTr("播放音量") + "(1-100)"
                             }
 
                             AppTextField {
@@ -3160,9 +3163,10 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: ScreenTools.scaleNum(8)
+                Layout.leftMargin: ScreenTools.scaleNum(16)
 
                 Label {
-                    Layout.preferredWidth: root.panelLabelWidth
+                    Layout.minimumWidth: root.panelLabelWidth
                     Layout.preferredHeight: root.ctrlH
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignRight
@@ -3209,9 +3213,10 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: ScreenTools.scaleNum(8)
+                Layout.leftMargin: ScreenTools.scaleNum(16)
 
                 Label {
-                    Layout.preferredWidth: root.panelLabelWidth
+                    Layout.minimumWidth: root.panelLabelWidth
                     Layout.preferredHeight: root.ctrlH
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignRight
@@ -3592,7 +3597,7 @@ Dialog {
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(250)
                                 Layout.preferredHeight: root.ctrlH
-                                model: [qsTr("简体中文"), qsTr("繁体中文"), qsTr("English")]
+                                model: ["简体中文", "繁体中文", "English"]
                             }
 
                         }
@@ -3686,7 +3691,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3710,7 +3715,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3723,7 +3728,7 @@ Dialog {
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
-                                model: ["(GMT-12:00)国际日期变更线西", "(GMT-11:00)中途岛，萨摩亚", "(GMT-10:00)夏威夷", "(GMT-09:00)阿拉斯加", "(GMT-08:00)太平洋时间（美国和加拿大）", "(GMT-07:00)山地时间（美国和加拿大）", "(GMT-06:00)中部时间（美国和加拿大），墨西哥城", "(GMT-05:00)东部时间（美国和加拿大），波哥大", "(GMT-04:00)大西洋时间（加拿大），加拉加斯", "(GMT-03:00)巴西利亚，乔治敦", "(GMT-02:00)中大西洋", "(GMT-01:00)亚速尔群岛，佛得角群岛", "(GMT+00:00)都柏林，伦敦，里斯本", "(GMT+01:00)巴黎，柏林，罗马，马德里", "(GMT+02:00)雅典，开罗，赫尔辛基", "(GMT+03:00)莫斯科，圣彼得堡，内罗毕", "(GMT+04:00)巴库，第比利斯，叶里温", "(GMT+05:00)伊斯兰堡，卡拉奇，塔什干", "(GMT+06:00)达卡，阿拉木图", "(GMT+07:00)曼谷，河内，雅加达", "(GMT+08:00)北京，重庆，乌鲁木齐，香港特别行政区", "(GMT+09:00)东京，大阪，首尔", "(GMT+10:00)悉尼，墨尔本，关岛", "(GMT+11:00)所罗门群岛，新喀里多尼亚", "(GMT+12:00)奥克兰，惠灵顿，斐济"]
+                                model: [qsTr("(GMT-12:00)国际日期变更线西"), qsTr("(GMT-11:00)中途岛，萨摩亚"), qsTr("(GMT-10:00)夏威夷"), qsTr("(GMT-09:00)阿拉斯加"), qsTr("(GMT-08:00)太平洋时间（美国和加拿大）"), qsTr("(GMT-07:00)山地时间（美国和加拿大）"), qsTr("(GMT-06:00)中部时间（美国和加拿大），墨西哥城"), qsTr("(GMT-05:00)东部时间（美国和加拿大），波哥大"), qsTr("(GMT-04:00)大西洋时间（加拿大），加拉加斯"), qsTr("(GMT-03:00)巴西利亚，乔治敦"), qsTr("(GMT-02:00)中大西洋"), qsTr("(GMT-01:00)亚速尔群岛，佛得角群岛"), qsTr("(GMT+00:00)都柏林，伦敦，里斯本"), qsTr("(GMT+01:00)巴黎，柏林，罗马，马德里"), qsTr("(GMT+02:00)雅典，开罗，赫尔辛基"), qsTr("(GMT+03:00)莫斯科，圣彼得堡，内罗毕"), qsTr("(GMT+04:00)巴库，第比利斯，叶里温"), qsTr("(GMT+05:00)伊斯兰堡，卡拉奇，塔什干"), qsTr("(GMT+06:00)达卡，阿拉木图"), qsTr("(GMT+07:00)曼谷，河内，雅加达"), qsTr("(GMT+08:00)北京，重庆，乌鲁木齐，香港特别行政区"), qsTr("(GMT+09:00)东京，大阪，首尔"), qsTr("(GMT+10:00)悉尼，墨尔本，关岛"), qsTr("(GMT+11:00)所罗门群岛，新喀里多尼亚"), qsTr("(GMT+12:00)奥克兰，惠灵顿，斐济")]
                                 currentIndex: 20
                             }
 
@@ -3736,7 +3741,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3760,11 +3765,11 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("NTP端口(1-65535)")
+                                text: qsTr("NTP端口") + "(1-65535)"
                             }
 
                             AppTextField {
@@ -3796,11 +3801,11 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
-                                text: qsTr("刷新间隔(60-999999)")
+                                text: qsTr("刷新间隔") + "(60-999999)"
                             }
 
                             AppTextField {
@@ -3833,7 +3838,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3866,7 +3871,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3899,7 +3904,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3910,7 +3915,7 @@ Dialog {
                                 id: ckDstStartMonthCombo
                                 objectName: "ckDstStartMonthCombo"
 
-                                Layout.preferredWidth: ScreenTools.scaleNum(110)
+                                Layout.preferredWidth: ScreenTools.scaleNum(100)
                                 Layout.preferredHeight: root.ctrlH
                                 model: ckMonthModel
                             }
@@ -3919,7 +3924,7 @@ Dialog {
                                 id: ckDstStartWeekSeqCombo
                                 objectName: "ckDstStartWeekSeqCombo"
 
-                                Layout.preferredWidth: ScreenTools.scaleNum(140)
+                                Layout.preferredWidth: ScreenTools.scaleNum(130)
                                 Layout.preferredHeight: root.ctrlH
                                 model: ckWeekSeqModel
                                 currentIndex: 4
@@ -3929,7 +3934,7 @@ Dialog {
                                 id: ckDstStartWeekDayCombo
                                 objectName: "ckDstStartWeekDayCombo"
 
-                                Layout.preferredWidth: ScreenTools.scaleNum(100)
+                                Layout.preferredWidth: ScreenTools.scaleNum(130)
                                 Layout.preferredHeight: root.ctrlH
                                 model: ckWeekDayModel
                                 currentIndex: 6
@@ -3955,7 +3960,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -3966,7 +3971,7 @@ Dialog {
                                 id: ckDstEndMonthCombo
                                 objectName: "ckDstEndMonthCombo"
 
-                                Layout.preferredWidth: ScreenTools.scaleNum(110)
+                                Layout.preferredWidth: ScreenTools.scaleNum(100)
                                 Layout.preferredHeight: root.ctrlH
                                 model: ckMonthModel
                             }
@@ -3975,7 +3980,7 @@ Dialog {
                                 id: ckDstEndWeekSeqCombo
                                 objectName: "ckDstEndWeekSeqCombo"
 
-                                Layout.preferredWidth: ScreenTools.scaleNum(140)
+                                Layout.preferredWidth: ScreenTools.scaleNum(130)
                                 Layout.preferredHeight: root.ctrlH
                                 model: ckWeekSeqModel
                             }
@@ -3984,7 +3989,7 @@ Dialog {
                                 id: ckDstEndWeekDayCombo
                                 objectName: "ckDstEndWeekDayCombo"
 
-                                Layout.preferredWidth: ScreenTools.scaleNum(100)
+                                Layout.preferredWidth: ScreenTools.scaleNum(130)
                                 Layout.preferredHeight: root.ctrlH
                                 model: ckWeekDayModel
                                 currentIndex: 6
@@ -4010,7 +4015,7 @@ Dialog {
                             spacing: ScreenTools.scaleNum(8)
 
                             Label {
-                                Layout.preferredWidth: root.panelLabelWidth
+                                Layout.preferredWidth: root.panelLabelWidth + ScreenTools.scaleNum(60)
                                 Layout.preferredHeight: root.ctrlH
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignRight
@@ -4023,7 +4028,7 @@ Dialog {
 
                                 Layout.preferredWidth: ScreenTools.scaleNum(150)
                                 Layout.preferredHeight: root.ctrlH
-                                model: [qsTr("30分钟"), qsTr("60分钟"), qsTr("90分钟"), qsTr("120分钟")]
+                                model: [30 + qsTr("分钟"), 60 + qsTr("分钟"), 90 + qsTr("分钟"), 120 + qsTr("分钟")]
                             }
 
                         }

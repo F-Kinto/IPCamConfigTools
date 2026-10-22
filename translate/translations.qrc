@@ -1,0 +1,9 @@
+<RCC>
+    <!-- prefix="/"：资源路径为 :/<lang>/xxx.qm，与 TranslatorManager::changeLanguage 的加载路径 :/en/... :/zh_CN/... 一致 -->
+    <qresource prefix="/">
+        <file>en/qt_en.qm</file>
+        <file>en/VmsTranslator_EN.qm</file>
+        <file>zh_CN/qt_zh_CN.qm</file>
+        <file>zh_CN/qtwebengine_zh_CN.qm</file>
+    </qresource>
+</RCC>

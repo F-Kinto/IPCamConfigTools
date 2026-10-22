@@ -13,6 +13,10 @@ Rectangle {
     // true : 列宽按可用宽度与 stretchFactors 权重自动分配，所有列压缩进可视区
     // false: 使用 fixedWidths 指定的固定列宽，超出可视区域时表格横向滚动
     property bool stretchToFill: false
+    // true : 固定列宽模式下最后一列弹性伸缩——可视区有富余时吃掉剩余宽度（表格铺满，无右侧余白），
+    //        空间不足时保持设计固定宽（内容显示完全，由横向滚动条负责查看）；
+    //        窗口尺寸变化时只重算最后一列，其余列保持固定/手动拖拽的宽度
+    property bool lastColumnFills: false
     // 列标题
     property var titles: []
     // resizable 为 false 时使用的固定列宽
@@ -189,6 +193,16 @@ Rectangle {
             for (i = 0; i < n; ++i) {
                 result.push(Math.max(root.minColumnWidth, root.fixedWidths[i] !== undefined ? root.fixedWidths[i] : ScreenTools.scaleNum(100)));
             }
+            // 末列弹性模式：可视区有富余时最后一列吃掉剩余宽度铺满；
+            // 空间不足时保持设计固定宽（result[n-1] 已含 fixedWidths 下限），内容显示完全，
+            // 前面各列按固定宽度保持、由横向滚动条查看
+            if (root.lastColumnFills && n > 1) {
+                var fixedSum = 0;
+                for (i = 0; i < n - 1; ++i)
+                    fixedSum += result[i];
+
+                result[n - 1] = Math.max(result[n - 1], root.width - fixedSum);
+            }
         } else {
             var total = 0;
             for (i = 0; i < n; ++i) {
@@ -237,11 +251,25 @@ Rectangle {
     onFixedWidthsChanged: computeWidths()
     onStretchFactorsChanged: computeWidths()
     onMinColumnWidthChanged: computeWidths()
-    // 用户手动拖拽过之后，窗口缩放不再覆盖手动列宽
+    // 用户手动拖拽过之后，窗口缩放不再覆盖手动列宽；
+    // 末列弹性模式例外：窗口尺寸变化时只重算最后一列（可视区有富余则伸展铺满，
+    // 空间不足则回落到设计固定宽保证内容显示完全），保留其余列的手动列宽
     onWidthChanged: {
-        if (!userResized)
-            computeWidths();
+        if (root.lastColumnFills && !root.stretchToFill && internal.widths.length > 1) {
+            var w = internal.widths.slice();
+            var fixedSum = 0;
+            for (var i = 0; i < w.length - 1; ++i)
+                fixedSum += w[i];
 
+            // 末列下限：设计固定宽（fixedWidths 末项，缺省 fallback 与 computeWidths 一致）
+            var lastIdx = w.length - 1;
+            var lastMin = root.fixedWidths[lastIdx] !== undefined ? root.fixedWidths[lastIdx] : ScreenTools.scaleNum(100);
+            w[lastIdx] = Math.max(Math.max(root.minColumnWidth, lastMin), root.width - fixedSum);
+            internal.widths = w;
+            tableView.forceLayout();
+        } else if (!userResized) {
+            computeWidths();
+        }
     }
     Component.onCompleted: computeWidths()
 

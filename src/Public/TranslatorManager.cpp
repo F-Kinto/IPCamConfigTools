@@ -64,9 +64,9 @@ void TranslatorManager::changeLanguage(const QString& str, const QString& str2)
     // 先删除当前安装的翻译
     removeCurrentTrans();
 
-    QString      webQmFile   = QString(":/translations/%2/qtwebengine_%1.qm").arg(str2).arg(str2);
-    QString      localQmFile = QString(":/translations/%2/qt_%1.qm").arg(str2).arg(str2);
-    QString      uiQmFile    = QString(":/translations/%2/VmsTranslator_%1.qm").arg(str).arg(str2);
+    QString      webQmFile   = QString(":/%2/qtwebengine_%1.qm").arg(str2).arg(str2);
+    QString      localQmFile = QString(":/%2/qt_%1.qm").arg(str2).arg(str2);
+    QString      uiQmFile    = QString(":/%2/VmsTranslator_%1.qm").arg(str).arg(str2);
     QTranslator* trans       = new QTranslator;
     if (trans->load(webQmFile) && QCoreApplication::installTranslator(trans)) {
         m_installTrans.push_back(trans);
