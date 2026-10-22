@@ -526,6 +526,9 @@ ApplicationWindow {
             return ;
 
         root.logAction("开始升级: 文件 %1 个, 设备 %2 台".arg(root.upgradeFiles.length).arg(root.selectedCount));
+        // 取第一个文件路径（当前只支持单文件升级）
+        var filePath = root.upgradeFiles[0];
+        commandPanel.startUpgrade(filePath);
     }
 
     // ===== 退出程序 =====
@@ -1092,7 +1095,7 @@ ApplicationWindow {
                     // 展示已选文件摘要；路径很长时末尾省略
                     text: root.upgradeFileSummary()
                     readOnly: true
-                    placeholderText: qsTr("请选择 %1 升级文件（可多选）").arg(".bin")
+                    placeholderText: qsTr("请选择 %1 升级文件（可多选）").arg(".bin, .img")
                 }
 
                 RowLayout {
@@ -1499,7 +1502,7 @@ ApplicationWindow {
 
         title: qsTr("请选择升级文件")
         selectMultiple: true
-        nameFilters: [qsTr("固件文件 %1").arg("*.bin"), qsTr("所有文件 (*)")]
+        nameFilters: [qsTr("固件文件 %1").arg("*.bin, *.img"), qsTr("所有文件 (*)")]
         folder: root.lastUpgradeDir !== "" ? ("file:///" + root.lastUpgradeDir.replace(/\\/g, "/")) : shortcuts.home
         onAccepted: {
             var paths = [];

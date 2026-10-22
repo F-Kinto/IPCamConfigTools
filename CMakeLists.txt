@@ -32,6 +32,8 @@ set(PUBLIC_SOURCES
     src/Public/DeviceManager.cpp
     src/Public/DeviceApiClient.h
     src/Public/DeviceApiClient.cpp
+    src/Public/DeviceUpgradeTask.h
+    src/Public/DeviceUpgradeTask.cpp
 )
 
 # HTTP 请求库（同步自 VmsTools_v2/common）：

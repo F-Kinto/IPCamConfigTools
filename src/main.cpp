@@ -11,6 +11,7 @@
 #include "Public/DeviceApiClient.h"
 #include "Public/DeviceManager.h"
 #include "Public/DeviceScanner.h"
+#include "Public/DeviceUpgradeTask.h"
 #include "Public/TranslatorManager.h"
 #include "Public/screentools.h"
 #include "Rtsp/RtspVideoItem.h"
@@ -90,6 +91,8 @@ int main(int argc, char* argv[]) {
     registerSingleton<DeviceApiClient>("DeviceApiClient");
     // 批量下发"配置其他参数"：设备间并行、设备内串行、失败 2 秒重试
     registerSingleton<BatchSettingsTask>("BatchSettingsTask");
+    // WiFi 设备固件一键升级：multipart 文件上传 + 广播轮询版本变化
+    registerSingleton<DeviceUpgradeTask>("DeviceUpgradeTask");
 
     // RTSP 直播渲染组件（模块 IPCam.Rtsp 1.0）：device 赋值自动拉流，
     // 内部走 Live555 收流 + FFmpeg 解码（同步自 VmsTools，固定 RTSP 单路）

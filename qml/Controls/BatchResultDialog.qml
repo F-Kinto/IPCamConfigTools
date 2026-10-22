@@ -89,7 +89,7 @@ AppContentDialog {
 
                                 function _itemText(d) {
                                     var c = d.ok ? "#2E7D32" : "#C62828";
-                                    var t = d.ok ? qsTr("成功") : qsTr("失败(已跳过)");
+                                    var t = d.ok ? qsTr("成功") : qsTr("失败");
                                     return d.name + ": <font color=\"" + c + "\">" + t + "</font>";
                                 }
                             }

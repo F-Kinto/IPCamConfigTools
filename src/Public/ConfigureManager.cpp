@@ -218,6 +218,8 @@ QString ConfigureManager::getDeviceUrl(const EnumNameSpace::DeviceQuestUrl& cmd)
             return "http://%1/goform/reboot?userid=admin&userkey=0192023a7bbd73250516f069df18b500";
         case EnumNameSpace::DeviceQuestUrl::eFactoryReset:
             return "http://%1/goform/restoreDefault?userid=admin&userkey=0192023a7bbd73250516f069df18b500";
+        case EnumNameSpace::DeviceQuestUrl::eUpdateFileToDeviceWifi:
+            return "http://%1/cgi-bin/upload_app.cgi?userid=admin&userkey=0192023a7bbd73250516f069df18b500";
         default:
             return "";
     }

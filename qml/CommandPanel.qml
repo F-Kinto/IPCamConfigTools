@@ -26,16 +26,16 @@ ColumnLayout {
     property int controlHeight: 30
 
     // ===== 上抛信号（面板入口，main.qml 连接实现）=====
-    // “设备搜索”：搜索会清空表格/勾选并读“系统配置-搜索时间”，留在 main.qml
+    // "设备搜索"：搜索会清空表格/勾选并读"系统配置-搜索时间"，留在 main.qml
     signal searchRequested()
-    // “播放勾选设备”：直播预览切换页签并合并播放列表，留在 main.qml
+    // "播放勾选设备"：直播预览切换页签并合并播放列表，留在 main.qml
     signal livePreviewRequested()
     // 全部设备全部设置项完成：上抛 main.qml 打开结果详情弹窗
     signal batchAllFinished()
     // 网络设置成功后设备已切到新 IP：上抛 main.qml 更新设备列表 IP 栏并同步勾选数据
     signal deviceIpChanged(string deviceKey, string newIp)
 
-    // ===== “执行修改（配置其他参数）”：批量下发勾选的设置项 =====
+    // ===== "执行修改（配置其他参数）"：批量下发勾选的设置项 =====
     // 执行中遮罩显隐（main.qml 全屏进度遮罩绑定）
     property bool batchRunning: false
     // 每设备一块：[{key, header, status, items: [{name, ok}]}]
@@ -44,7 +44,81 @@ ColumnLayout {
     // 网络设置成功后据此上报 main.qml 更新设备列表
     property var batchNewIps: ({})
 
-    // ===== “执行修改（设定IP）”：按勾选数量给勾选设备下发新 IP =====
+    // ===== "文件一键升级"：WiFi 设备固件升级 =====
+    // 升级运行中（复用 batchRunning / batchRows 遮罩体系）
+    property bool upgradeRunning: false
+
+    // 启动固件升级：由 main.qml 的 startFileUpgrade() 调用
+    function startUpgrade(filePath) {
+        var devices = DeviceManager.checkedDevices();
+        var devs = [];
+        var rows = [];
+        for (var i = 0; i < devices.length; i++) {
+            var uid = devices[i]["uid"] || devices[i]["mac"] || devices[i]["ip"] || "";
+            var ip = devices[i]["ip"] || "";
+            var mac = devices[i]["mac"] || "";
+            var ver = devices[i]["currentVersion"] || "";
+            if (uid === "" || ip === "")
+                continue;
+
+            devs.push({
+                "uid": uid,
+                "ip": ip,
+                "mac": mac,
+                "currentVersion": ver
+            });
+            rows.push({
+                "key": uid,
+                "header": "%1[%2]:".arg(uid).arg(ip),
+                "uid": uid,
+                "ip": ip,
+                "status": "",
+                "items": []
+            });
+        }
+        if (devs.length === 0) {
+            confirmBox.showTip(qsTr("温馨提示"), qsTr("请先选择设备"));
+            return false;
+        }
+
+        panel.batchRows = rows;
+        panel.batchRunning = true;
+        panel.upgradeRunning = true;
+        DeviceUpgradeTask.startUpgrade(filePath, devs);
+        return true;
+    }
+
+    // DeviceUpgradeTask 进度/结果回调
+    // state: 0=eUploading, 1=eUpgraded, 2=eSuccess, 3=eFailed
+    Connections {
+        target: DeviceUpgradeTask
+
+        function onDeviceProgress(deviceKey, state) {
+            var text = "";
+            if (state === 0)
+                text = qsTr("正在上传固件...");
+            else if (state === 1)
+                text = qsTr("上传完成, 等待设备重启生效...");
+            else if (state === 2)
+                text = qsTr("升级成功");
+            else if (state === 3)
+                text = qsTr("升级失败");
+            panel.setRowStatus(deviceKey, text);
+        }
+
+        function onDeviceResult(deviceKey, success) {
+            panel.appendRowItem(deviceKey, qsTr("固件升级"), success);
+        }
+
+        function onAllFinished() {
+            panel.batchRunning = false;
+            panel.upgradeRunning = false;
+            panel.batchAllFinished();
+        }
+
+    }
+
+    // ===== "执行修改（设定IP）"：按勾选数量给勾选设备下发新 IP =====
     property bool ipAllocating: false
     // 本次分配请求的起始 IP：响应靠它匹配，防止过期响应串扰
     property string ipAllocatingBaseIp: ""
@@ -67,8 +141,8 @@ ColumnLayout {
         }
     }
 
-    // “执行修改”点击入口：没设IP先提示；没勾选时列表为空直接提示，
-    // 有设备则弹“是|否”确认是否全选（是→全选并继续）；已勾选直接执行。
+    // "执行修改"点击入口：没设IP先提示；没勾选时列表为空直接提示，
+    // 有设备则弹"是|否"确认是否全选（是→全选并继续）；已勾选直接执行。
     // 1 台直接下发弹窗保存的 IP；多台从该 IP 起凑等量空闲 IP（末段叠加
     // 到 .254，不足再递减到 .1）后逐台下发
     function executeSetIp() {
@@ -90,7 +164,7 @@ ColumnLayout {
     }
 
     // 修改IP执行主体：勾选与 IP 均已就绪，按台数分流。
-    // 供本面板“执行修改”与 main.qml 的“是→全选”确认框共用
+    // 供本面板"执行修改"与 main.qml 的"是→全选"确认框共用
     function executeSetIpChecked() {
         var baseIp = setIpDialog.savedParams["ip"];
         if (panel.selectedCount === 1) {
@@ -261,10 +335,10 @@ ColumnLayout {
 
     }
 
-    // “执行修改（设定IP）”勾选多台时 findFreeIpsAsync 的结果：凑满等量空闲 IP 后逐台配对下发
+    // "执行修改（设定IP）"勾选多台时 findFreeIpsAsync 的结果：凑满等量空闲 IP 后逐台配对下发
     Connections {
         function onSignalFreeIpsFound(baseIp, wanted, freeIps) {
-            // “执行修改（设定IP）”多台的分配结果：凑满等量空闲 IP 后逐台配对下发
+            // "执行修改（设定IP）"多台的分配结果：凑满等量空闲 IP 后逐台配对下发
             if (panel.ipAllocating && baseIp === panel.ipAllocatingBaseIp) {
                 panel.ipAllocating = false;
                 panel.ipAllocatingBaseIp = "";
