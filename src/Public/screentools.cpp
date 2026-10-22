@@ -385,11 +385,11 @@ void ScreenTools::checkIpOccupiedAsync(const QString& ip)
 /**
  * @brief 异步批量查找空闲 IP（不阻塞 UI 线程）
  *
- * 以 baseIp 为起点在其所在网段内按序探测，凑满 count 个空闲地址即止：
+ * 以 baseIp 为起点仅正向递增探测，凑满 count 个空闲地址即止：
  *   1) 末段从 baseIp 的末段起逐个 +1 叠加，跳过被占用（ARP 有人应答）的地址，
  *      一直叠加到 .254（.255 为广播地址不参与）；
- *   2) 到 .254 仍不足 count 个，再从 baseIp 末段的下方逐个 -1 递减探测，直到 .1；
- *   3) 两条路都穷尽仍不足，返回已找到的部分（freeIps.size() < wanted）。
+ *   2) 到 .254 仍不足 count 个，返回已找到的部分（freeIps.size() < wanted）。
+ *   不向前递减：由调用方根据不足情况决定是否更换起始 IP。
  *
  * 探测在线程内串行执行（每个 SendARP 无人应答时约百毫秒级），期间界面由调用方
  * 的遮罩提示等待。结果经 signalFreeIpsFound 回传，请求/响应靠 baseIp 字符串匹配，
@@ -411,14 +411,8 @@ void ScreenTools::findFreeIpsAsync(const QString& baseIp, int count)
         // 起始末段合法（1~254）才进入查找：.0 是网络地址、.255 是广播地址，不参与叠加
         if (lastIdx > 0 && count > 0 && start >= 1 && start <= 254) {
             const QString prefix = ipCopy.left(lastIdx + 1); // "a.b.c."
-            // 升序：起始末段 .. 254
+            // 仅升序：起始末段 .. 254
             for (int last = start; last <= 254 && freeIps.size() < count; ++last) {
-                QString ip = prefix + QString::number(last);
-                if (!probeIpOccupied(ip))
-                    freeIps << ip;
-            }
-            // 降序：起始末段-1 .. 1（升序已穷尽还不够时才走这里）
-            for (int last = start - 1; last >= 1 && freeIps.size() < count; --last) {
                 QString ip = prefix + QString::number(last);
                 if (!probeIpOccupied(ip))
                     freeIps << ip;

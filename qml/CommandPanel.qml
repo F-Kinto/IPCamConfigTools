@@ -51,41 +51,94 @@ ColumnLayout {
     // 启动固件升级：由 main.qml 的 startFileUpgrade() 调用
     function startUpgrade(filePath) {
         var devices = DeviceManager.checkedDevices();
-        var devs = [];
-        var rows = [];
+        var devs = [];       // 需要升级的设备（传给 C++）
+        var rows = [];       // 遮罩行数据
+        var needUpgrade = 0; // 需要升级的设备数
+
+        // 提取文件版本号
+        var fileVer = DeviceUpgradeTask.extractFileVersion(filePath);
+
         for (var i = 0; i < devices.length; i++) {
             var uid = devices[i]["uid"] || devices[i]["mac"] || devices[i]["ip"] || "";
             var ip = devices[i]["ip"] || "";
             var mac = devices[i]["mac"] || "";
-            var ver = devices[i]["currentVersion"] || "";
+            var curVer = devices[i]["currentVersion"] || "";
             if (uid === "" || ip === "")
                 continue;
 
-            devs.push({
-                "uid": uid,
-                "ip": ip,
-                "mac": mac,
-                "currentVersion": ver
-            });
-            rows.push({
+            // 版本比较
+            var cmp = DeviceUpgradeTask.compareVersions(fileVer, curVer);
+            var statusText = "";
+            var itemOk = true; // 结果详情弹窗里该项是否标记成功
+            var itemMessage = ""; // 结果详情弹窗里该项的自定义提示（空=显示成功/失败）
+            var skip = false;
+
+            if (cmp < 0) {
+                // 文件版本 < 当前版本 → 版本过低，红色
+                statusText = "<font color=\"#E04040\">" + qsTr("当前选择版本过低!") + "</font>";
+                itemOk = false;
+                itemMessage = qsTr("当前选择版本过低!");
+                skip = true;
+            } else if (cmp === 0 && fileVer !== "" && curVer !== "") {
+                // 版本相等 → 已是最新，蓝色
+                statusText = "<font color=\"#2F80ED\">" + qsTr("当前已是最新版本!") + "</font>";
+                itemOk = true;
+                itemMessage = qsTr("当前已是最新版本!");
+                skip = true;
+            }
+
+            var row = {
                 "key": uid,
                 "header": "%1[%2]:".arg(uid).arg(ip),
                 "uid": uid,
                 "ip": ip,
-                "status": "",
-                "items": []
-            });
+                "status": statusText,
+                "items": skip ? [{"name": qsTr("固件升级"), "ok": itemOk, "message": itemMessage}] : []
+            };
+            rows.push(row);
+
+            if (!skip) {
+                devs.push({
+                    "uid": uid,
+                    "ip": ip,
+                    "mac": mac,
+                    "currentVersion": curVer
+                });
+                needUpgrade++;
+            }
         }
-        if (devs.length === 0) {
+
+        if (rows.length === 0) {
             confirmBox.showTip(qsTr("温馨提示"), qsTr("请先选择设备"));
             return false;
         }
 
         panel.batchRows = rows;
+
+        if (needUpgrade === 0) {
+            // 所有设备都不需要升级：显示遮罩片刻后弹出结果详情
+            panel.batchRunning = true;
+            panel.upgradeRunning = true;
+            // 立即标记完成（延时让用户看到状态文本）
+            upgradeCheckTimer.start();
+            return true;
+        }
+
         panel.batchRunning = true;
         panel.upgradeRunning = true;
         DeviceUpgradeTask.startUpgrade(filePath, devs);
         return true;
+    }
+
+    // 版本检查全跳过时：短暂显示遮罩后弹出结果详情
+    Timer {
+        id: upgradeCheckTimer
+        interval: 1500
+        onTriggered: {
+            panel.batchRunning = false;
+            panel.upgradeRunning = false;
+            panel.batchAllFinished();
+        }
     }
 
     // DeviceUpgradeTask 进度/结果回调
@@ -106,8 +159,11 @@ ColumnLayout {
             panel.setRowStatus(deviceKey, text);
         }
 
-        function onDeviceResult(deviceKey, success) {
+        function onDeviceResult(deviceKey, success, newVersion) {
             panel.appendRowItem(deviceKey, qsTr("固件升级"), success);
+            // 升级成功且有新版本号 → 更新设备列表"升级后版本号"列
+            if (newVersion && newVersion !== "")
+                host.setDeviceTargetVersion(deviceKey, newVersion);
         }
 
         function onAllFinished() {
@@ -342,9 +398,9 @@ ColumnLayout {
             if (panel.ipAllocating && baseIp === panel.ipAllocatingBaseIp) {
                 panel.ipAllocating = false;
                 panel.ipAllocatingBaseIp = "";
-                if (freeIps.length < wanted) {
-                    // 网段内空闲 IP 不够：提示后中断，可换起始 IP 重试
-                    confirmBox.showTip(qsTr("温馨提示"), qsTr("网段内空闲IP不足(需%1个, 只找到%2个), 请调整起始IP").arg(wanted).arg(freeIps.length));
+                if ((freeIps.length === 0 && wanted > 0) || freeIps.length < wanted) {
+                    // 空闲 IP 数不够：提示具体差额，不下发任何 IP 避免冲突
+                    confirmBox.showTip(qsTr("温馨提示"), qsTr("起始IP后续可用IP不足, 批量分配失败, 请更换起始IP, 减少设备或更换网段").arg(freeIps.length).arg(wanted));
                     return ;
                 }
                 panel.sendSetIpRequests(freeIps);
@@ -368,7 +424,6 @@ ColumnLayout {
         text: panel.searching ? qsTr("搜索中...") : qsTr("设备搜索")
         enabled: !panel.searching
         onClicked: {
-            host.logAction("我点击了%1按钮".arg("设备搜索"));
             panel.searchRequested();
         }
     }
@@ -390,7 +445,6 @@ ColumnLayout {
             Layout.fillWidth: true
             text: qsTr("执行修改")
             onClicked: {
-                host.logAction("我点击了%1按钮（设定IP）".arg(text));
                 panel.executeSetIp();
             }
         }

@@ -67,8 +67,9 @@ class ScreenTools : public QObject {
     Q_INVOKABLE static bool    isIpOccupied(const QString& ip);
     // 异步探测 IP 占用：不阻塞 UI 线程，结果经 signalIpOccupied 信号回传（详见 cpp 注释）
     Q_INVOKABLE void           checkIpOccupiedAsync(const QString& ip);
-    // 异步批量查找空闲 IP：从 baseIp 末段起向上叠加到 .254，不足再从其下方递减到 .1，
-    // 跳过被占用的地址，凑满 count 个即止；结果经 signalFreeIpsFound 信号回传（详见 cpp 注释）
+    // 异步批量查找空闲 IP：从 baseIp 末段起仅正向递增到 .254，
+    // 跳过被占用的地址，凑满 count 个即止；不足时返回已找到的部分，由调用方处理。
+    // 结果经 signalFreeIpsFound 信号回传（详见 cpp 注释）
     Q_INVOKABLE void           findFreeIpsAsync(const QString& baseIp, int count);
 
     bool                getOutOfScreen();

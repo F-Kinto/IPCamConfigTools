@@ -6,7 +6,7 @@ import IPCam.Public 1.0
 import "Controls"
 
 // 其它设置弹窗：左侧分类树 + 右侧参数面板（样式与设定IP/OSD修改弹窗一致）
-// 分类树为静态配置项；当前仅“网络设置”页有内容，其余页显示占位，待对接协议后逐页补充
+// 分类树为静态配置项；当前仅"网络设置"页有内容，其余页显示占位，待对接协议后逐页补充
 Dialog {
     id: root
 
@@ -14,23 +14,23 @@ Dialog {
     readonly property int ctrlH: ScreenTools.scaleNum(28)
     // 左侧分类树宽度
     readonly property int treeWidth: ScreenTools.scaleNum(220)
-    // 右侧面板标签列宽（容纳“最大心跳超时次数”等长标签）
+    // 右侧面板标签列宽（容纳"最大心跳超时次数"等长标签）
     readonly property int panelLabelWidth: ScreenTools.scaleNum(120)
     // 当前选中的设置页 key（对应 groups 里子项的 key）
     property string selectedKey: "network"
-    // 打开时快照左侧树勾选状态；本次打开中没点过“保存”的页面，关闭时回滚其勾选状态
+    // 打开时快照左侧树勾选状态；本次打开中没点过"保存"的页面，关闭时回滚其勾选状态
     property var openCheckedMap: ({
     })
-    // 本次打开后点过“保存”的页面 key
+    // 本次打开后点过"保存"的页面 key
     property var savedKeys: ({
     })
     // 关闭窗口后卸掉右侧面板：Dialog 关闭只是隐藏，面板实例不会销毁，
-    // 不卸掉的话未保存的编辑会一直留着，下次打开也不会重新走“回填已保存值/默认值”的流程
+    // 不卸掉的话未保存的编辑会一直留着，下次打开也不会重新走"回填已保存值/默认值"的流程
     property bool panelSuspended: false
     // ===== 网络设置联动数据源（由 main.qml 注入）=====
     // 本机网卡列表（ipv4/netmask/gateway 等字段）
     property var nicList: []
-    // 主界面当前选中的网卡；选中“所有网卡”时为 null
+    // 主界面当前选中的网卡；选中"所有网卡"时为 null
     property var selectedNic: null
     // 设备列表第一台设备的 IP；列表为空时为空串
     property string firstDeviceIp: ""
@@ -84,16 +84,17 @@ Dialog {
             "name": qsTr("定期维护")
         }, {
             "key": "language",
-            "name": qsTr("设备语言")
+            "name": qsTr("设备语言"),
+            "visible": false
         }]
     }]
     // 各设置页的勾选状态（key -> bool）；父节点勾选时批量设置整个分组
     property var checkedMap: ({
     })
-    // 与“OSD修改”弹窗共用的 OSD 参数（由 main.qml 注入）：本页保存走 savedPanelValues 写 other_settings.json
+    // 与"OSD修改"弹窗共用的 OSD 参数（由 main.qml 注入）：本页保存走 savedPanelValues 写 other_settings.json
     // 的 osd 条目，弹窗保存经 osdSavedFromDialog 信号回写同一条目；启动读回后由 syncSharedOsdFromStore 同步进来
     property QtObject sharedOsd: null
-    // ===== 参数持久化：只有点面板上的“保存”才提交；关闭窗口/切换页面丢弃未保存的修改 =====
+    // ===== 参数持久化：只有点面板上的"保存"才提交；关闭窗口/切换页面丢弃未保存的修改 =====
     // 结构：savedPanelValues[面板 key][控件 objectName] = { k: 类型, v: 值 }
     property var savedPanelValues: ({
     })
@@ -329,13 +330,13 @@ Dialog {
         }
         root.savedPanelValues = m;
         // 勾选状态随启动整体恢复：文件里各面板的 switch 直接灌入 checkedMap，
-        // 打开“配置其它参数”界面时左侧子节点与本页复选框立即显示上次保存的勾选
+        // 打开"配置其它参数"界面时左侧子节点与本页复选框立即显示上次保存的勾选
         root.checkedMap = sw;
-        // OSD 数据同步进与“OSD修改”弹窗共用的参数对象（两边重启后显示一致）
+        // OSD 数据同步进与"OSD修改"弹窗共用的参数对象（两边重启后显示一致）
         root.syncSharedOsdFromStore();
     }
 
-    // 启动读回后把 OSD 数据同步进与“OSD修改”弹窗共用的参数对象：
+    // 启动读回后把 OSD 数据同步进与"OSD修改"弹窗共用的参数对象：
     // 两边共用 other_settings.json 的 osd 条目，重启后弹窗（applyShared）与本页（回填+readShared）显示一致
     function syncSharedOsdFromStore() {
         if (!root.sharedOsd)
@@ -391,7 +392,7 @@ Dialog {
         root.savedKeys = s;
     }
 
-    // 未保存的页面：其“设置XXX”勾选（含左侧树对应节点）回到打开弹窗前的状态
+    // 未保存的页面：其"设置XXX"勾选（含左侧树对应节点）回到打开弹窗前的状态
     function rollbackUnsavedChecks() {
         var m = root.copyMap(root.checkedMap);
         var changed = false;
@@ -433,7 +434,10 @@ Dialog {
         var m = {
         };
         for (var k in root.checkedMap) m[k] = root.checkedMap[k]
-        for (var i = 0; i < items.length; i++) m[items[i].key] = value
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].visible === false) continue;
+            m[items[i].key] = value;
+        }
         root.checkedMap = m;
     }
 
@@ -702,10 +706,20 @@ Dialog {
         for (var i = 0; i < kids.length; i++) root.applyValues(kids[i], path + "/" + i, store)
     }
 
-    // 点“保存”：提交当前面板所有控件的值，并弹出保存成功提示
+    // 点"保存"：提交当前面板所有控件的值，并弹出保存成功提示
     function saveCurrentPanel() {
         if (!panelLoader.item)
             return ;
+
+        // 时钟设置面板：NTP 端口和刷新间隔提交前校验
+        // 0 为合法特殊值（使用默认端口 / 不主动轮询），非 0 时需在规定区间内
+        if (root.selectedKey === "clock" && panelLoader.item.validateNtpFields) {
+            var errMsg = panelLoader.item.validateNtpFields();
+            if (errMsg !== "") {
+                saveTipBox.show(qsTr("温馨提示"), errMsg);
+                return ;
+            }
+        }
 
         var values = {
         };
@@ -722,7 +736,7 @@ Dialog {
         for (var nk in root.savedPanelNames) nm[nk] = root.savedPanelNames[nk]
         nm[root.selectedKey] = labels;
         root.savedPanelNames = nm;
-        // OSD设置页额外写入与“OSD修改”弹窗共用的参数（同步函数定义在面板内部，通过 item 调用）
+        // OSD设置页额外写入与"OSD修改"弹窗共用的参数（同步函数定义在面板内部，通过 item 调用）
         if (root.selectedKey === "timeTitle" && panelLoader.item.writeShared)
             panelLoader.item.writeShared(root.sharedOsd);
 
@@ -855,7 +869,7 @@ Dialog {
     // 网络设置 IP/掩码/网关 的联动默认值：
     // 1) 设备列表非空：与本机中与第一台设备同网段的网卡一致（找不到同网段网卡回退到后两条）；
     // 2) 列表为空且选中具体网卡：与选中网卡一致；
-    // 3) 列表为空且选中“所有网卡”：与本机第一张有 IPv4 的网卡一致
+    // 3) 列表为空且选中"所有网卡"：与本机第一张有 IPv4 的网卡一致
     readonly property var networkInfo: {
         if (root.firstDeviceIp !== "") {
             for (var i = 0; i < root.nicList.length; i++) {
@@ -887,13 +901,13 @@ Dialog {
         if (store !== undefined)
             root.applyValues(panelItem, "0", store);
 
-        // OSD设置页：共享参数优先（可能刚被“OSD修改”弹窗保存过）
+        // OSD设置页：共享参数优先（可能刚被"OSD修改"弹窗保存过）
         if (root.selectedKey === "timeTitle" && panelItem.readShared)
             panelItem.readShared(root.sharedOsd);
 
     }
 
-    // 把表单容器内的行统一启用/禁用（exempt 指定的行除外，一般是“开关”所在行）
+    // 把表单容器内的行统一启用/禁用（exempt 指定的行除外，一般是"开关"所在行）
     function setRowsEnabled(container, exempt, enabled) {
         if (!container || container.data === undefined)
             return ;
@@ -916,9 +930,9 @@ Dialog {
     clip: true
     anchors.centerIn: Overlay.overlay
     title: qsTr("其它设置")
-    // 每次打开恢复默认选中“网络设置”，并记录当前勾选状态用于未保存回滚
-    // “OSD修改”弹窗点保存：把这份数据并入本弹窗的 OSD 运行结构并按协议格式写入 other_settings.json
-    // （两边共用同一个 osd 条目）；勾选状态一并固化——弹窗“设定时间和标题”勾选等同本页“OSD设置”面板勾选，
+    // 每次打开恢复默认选中"网络设置"，并记录当前勾选状态用于未保存回滚
+    // "OSD修改"弹窗点保存：把这份数据并入本弹窗的 OSD 运行结构并按协议格式写入 other_settings.json
+    // （两边共用同一个 osd 条目）；勾选状态一并固化——弹窗"设定时间和标题"勾选等同本页"OSD设置"面板勾选，
     // 之后关闭本弹窗不会被当作未保存修改回滚
     Connections {
         target: root.sharedOsd
@@ -975,7 +989,7 @@ Dialog {
         root.openCheckedMap = root.copyMap(root.checkedMap);
         root.savedKeys = {
         };
-        // 重新加载面板：未保存的编辑被丢弃，按“已保存值 or 默认值”重建
+        // 重新加载面板：未保存的编辑被丢弃，按"已保存值 or 默认值"重建
         root.panelSuspended = false;
     }
     // 关闭窗口（✕ / ESC / 程序关闭）时：卸掉面板 + 回滚未保存页面的勾选状态
@@ -999,7 +1013,7 @@ Dialog {
 
                 text: qsTr("设置以太网")
                 checked: false
-                // 与左侧树“网络设置”前的复选框强绑定（双向同步）
+                // 与左侧树"网络设置"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("network", checked)
 
                 Binding {
@@ -1229,15 +1243,15 @@ Dialog {
         ColumnLayout {
             id: osdRoot
 
-            // 本页标签列宽（容纳“标题内容（多行用^分隔）”长标签）
+            // 本页标签列宽（容纳"标题内容（多行用^分隔）"长标签）
             readonly property int osdLabelWidth: ScreenTools.scaleNum(200)
 
-            // “OSD显示”为“禁用”时，除该开关所在行外，其余项全部不可编辑
+            // "OSD显示"为"禁用"时，除该开关所在行外，其余项全部不可编辑
             function applyEnableState() {
                 root.setRowsEnabled(osdFormCol, osdEnableRow, osdEnableCombo.currentIndex === 0);
             }
 
-            // 与“OSD修改”弹窗共用参数：本页点保存时写回（只同步两边都有的项）
+            // 与"OSD修改"弹窗共用参数：本页点保存时写回（只同步两边都有的项）
             function writeShared(s) {
                 if (!s)
                     return ;
@@ -1246,20 +1260,20 @@ Dialog {
                 s.osdDisplayIndex = osdEnableCombo.currentIndex;
                 s.timeFormatIndex = osdTimeFormatCombo.currentIndex;
                 s.showWeek = osdShowWeekCheck.checked;
-                // 弹窗里的“标题位置”对应本页的“时间显示位置”
+                // 弹窗里的"标题位置"对应本页的"时间显示位置"
                 s.titlePosIndex = osdTimeShowPosCombo.currentIndex;
                 s.titleContent = osdTitleInput.text;
                 s.saved = true;
             }
 
-            // 与“OSD修改”弹窗共用参数：打开本页时回填（没保存过则保持默认）
+            // 与"OSD修改"弹窗共用参数：打开本页时回填（没保存过则保持默认）
             function readShared(s) {
                 if (!s || !s.saved)
                     return ;
 
                 // 总开关 osdSetCheck 不回填：它与左侧树勾选强绑定（Binding 正向同步 checkedMap），
                 // 共享对象的 setTimeTitle 不随树勾选实时更新，用它覆盖面板开关会经
-                // onCheckedChanged 反向回写树勾选——点进面板勾选被“偷掉”的根源
+                // onCheckedChanged 反向回写树勾选——点进面板勾选被"偷掉"的根源
                 osdEnableCombo.currentIndex = s.osdDisplayIndex;
                 osdTimeFormatCombo.currentIndex = s.timeFormatIndex;
                 osdShowWeekCheck.checked = s.showWeek;
@@ -1277,7 +1291,7 @@ Dialog {
 
                 text: qsTr("设置时间和标题")
                 checked: false
-                // 与左侧树“OSD设置”前的复选框强绑定（双向同步）
+                // 与左侧树"OSD设置"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("timeTitle", checked)
 
                 Binding {
@@ -1525,7 +1539,7 @@ Dialog {
         ColumnLayout {
             id: gbRoot
 
-            // “启用28181”为“禁用”时，除该开关所在行外，其余项全部不可编辑
+            // "启用28181"为"禁用"时，除该开关所在行外，其余项全部不可编辑
             function applyEnableState() {
                 var on = gbEnableCombo.currentIndex === 1;
                 root.setRowsEnabled(gbLeftCol, gbEnableRow, on);
@@ -1543,7 +1557,7 @@ Dialog {
 
                 text: qsTr("设置28181")
                 checked: false
-                // 与左侧树“28181接入设置”前的复选框强绑定（双向同步）
+                // 与左侧树"28181接入设置"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("gb28181", checked)
 
                 Binding {
@@ -1991,7 +2005,7 @@ Dialog {
 
                 text: qsTr("设置视频采集")
                 checked: false
-                // 与左侧树“视频采集设置”前的复选框强绑定（双向同步）
+                // 与左侧树"视频采集设置"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("videoCapture", checked)
 
                 Binding {
@@ -2334,7 +2348,7 @@ Dialog {
 
                 text: qsTr("设置视频编码")
                 checked: false
-                // 与左侧树“视频编码”前的复选框强绑定（双向同步）
+                // 与左侧树"视频编码"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("videoEncode", checked)
 
                 Binding {
@@ -2805,7 +2819,7 @@ Dialog {
         ColumnLayout {
             id: aeRoot
 
-            // “启用编码”为“禁用”时，除该开关所在行外，其余项全部不可编辑
+            // "启用编码"为"禁用"时，除该开关所在行外，其余项全部不可编辑
             function applyEnableState() {
                 root.setRowsEnabled(aeFormCol, aeEnableRow, aeEnableCombo.currentIndex === 0);
             }
@@ -2820,7 +2834,7 @@ Dialog {
 
                 text: qsTr("设置音频编码")
                 checked: false
-                // 与左侧树“音频编码”前的复选框强绑定（双向同步）
+                // 与左侧树"音频编码"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("audioEncode", checked)
 
                 Binding {
@@ -3002,7 +3016,7 @@ Dialog {
 
                 text: qsTr("设置音量配置")
                 checked: false
-                // 与左侧树“音量配置”前的复选框强绑定（双向同步）
+                // 与左侧树"音量配置"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("audioReconfig", checked)
 
                 Binding {
@@ -3152,7 +3166,7 @@ Dialog {
                 root.saveCurrentPanel();
             }
 
-            // 与左侧树“移动侦测”前的复选框强绑定（双向同步）
+            // 与左侧树"移动侦测"前的复选框强绑定（双向同步）
             Binding {
                 target: mdPanel
                 property: "switchChecked"
@@ -3202,7 +3216,7 @@ Dialog {
                 root.saveCurrentPanel();
             }
 
-            // 与左侧树“声音侦测”前的复选框强绑定（双向同步）
+            // 与左侧树"声音侦测"前的复选框强绑定（双向同步）
             Binding {
                 target: adPanel
                 property: "switchChecked"
@@ -3252,7 +3266,7 @@ Dialog {
 
                 text: qsTr("修改admin账号密码")
                 checked: false
-                // 与左侧树“账号管理”前的复选框强绑定（双向同步）
+                // 与左侧树"账号管理"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("account", checked)
 
                 Binding {
@@ -3373,7 +3387,7 @@ Dialog {
         ColumnLayout {
             id: mtRoot
 
-            // “定时维护”开关为“禁用”时，除该开关所在行外，其余项全部不可编辑
+            // "定时维护"开关为"禁用"时，除该开关所在行外，其余项全部不可编辑
             function applyEnableState() {
                 root.setRowsEnabled(mtFormCol, mtEnableRow, mtEnableCombo.currentIndex === 0);
             }
@@ -3388,7 +3402,7 @@ Dialog {
 
                 text: qsTr("定时维护")
                 checked: false
-                // 与左侧树“定期维护”前的复选框强绑定（双向同步）
+                // 与左侧树"定期维护"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("maintenance", checked)
 
                 Binding {
@@ -3545,7 +3559,7 @@ Dialog {
 
                 text: qsTr("设置设备语言")
                 checked: false
-                // 与左侧树“设备语言”前的复选框强绑定（双向同步）
+                // 与左侧树"设备语言"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("language", checked)
 
                 Binding {
@@ -3638,6 +3652,18 @@ Dialog {
         id: clockPanel
 
         ColumnLayout {
+            // 时钟设置面板提交前校验：NTP 端口和刷新间隔
+            // 返回 "" 表示通过，否则返回错误提示文本
+            function validateNtpFields() {
+                var portVal = parseInt(ckNtpPortInput.text);
+                if (isNaN(portVal) || (portVal !== 0 && (portVal < 1 || portVal > 65535)))
+                    return qsTr("NTP端口输入值需在0或1~65535区间");
+                var intervalVal = parseInt(ckRefreshInput.text);
+                if (isNaN(intervalVal) || (intervalVal !== 0 && (intervalVal < 60 || intervalVal > 999999)))
+                    return qsTr("刷新间隔输入值需在0或60~999999区间");
+                return "";
+            }
+
             // 可复用的 DST 配置行模型
             readonly property var ckMonthModel: [qsTr("一月份"), qsTr("二月份"), qsTr("三月份"), qsTr("四月份"), qsTr("五月份"), qsTr("六月份"), qsTr("七月份"), qsTr("八月份"), qsTr("九月份"), qsTr("十月份"), qsTr("十一月份"), qsTr("十二月份")]
             readonly property var ckWeekSeqModel: [qsTr("第一个"), qsTr("第二个"), qsTr("第三个"), qsTr("第四个"), qsTr("最后一个")]
@@ -3652,7 +3678,7 @@ Dialog {
 
                 text: qsTr("时钟设置")
                 checked: false
-                // 与左侧树“时钟设置”前的复选框强绑定（双向同步）
+                // 与左侧树"时钟设置"前的复选框强绑定（双向同步）
                 onCheckedChanged: root.setChecked("clock", checked)
 
                 Binding {
@@ -3779,18 +3805,8 @@ Dialog {
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
                                 text: "0"
-                                // 失去焦点时校验：超出 1~65535 区间则强制改为边界值
-                                onEditingFinished: {
-                                    var v = parseInt(text);
-                                    if (isNaN(v))
-                                        v = 1;
-
-                                    if (v < 1)
-                                        v = 1;
-                                    else if (v > 65535)
-                                        v = 65535;
-                                    text = v.toString();
-                                }
+                                // 不做自动修正：0 为合法特殊值（使用默认端口），
+                                // 非 0 时需在 1~65535 区间，提交时校验拦截
                             }
 
                         }
@@ -3815,18 +3831,8 @@ Dialog {
                                 Layout.preferredWidth: ScreenTools.scaleNum(360)
                                 Layout.preferredHeight: root.ctrlH
                                 text: "0"
-                                // 失去焦点时校验：超出 60~999999 区间则强制改为边界值
-                                onEditingFinished: {
-                                    var v = parseInt(text);
-                                    if (isNaN(v))
-                                        v = 60;
-
-                                    if (v < 60)
-                                        v = 60;
-                                    else if (v > 999999)
-                                        v = 999999;
-                                    text = v.toString();
-                                }
+                                // 不做自动修正：0 为合法特殊值（不主动轮询同步），
+                                // 非 0 时需在 60~999999 区间，提交时校验拦截
                             }
 
                         }
@@ -3898,7 +3904,7 @@ Dialog {
                         // ===== 夏令时配置（启用时才显示） =====
                         // 夏令时开始时间：月份 / 周序 / 星期 / 时刻
                         RowLayout {
-                            // 夏令时开关为“禁用”时，夏令时的配置项保留显示但不可编辑
+                            // 夏令时开关为"禁用"时，夏令时的配置项保留显示但不可编辑
                             enabled: ckDstEnableCombo.currentIndex === 0
                             Layout.fillWidth: true
                             spacing: ScreenTools.scaleNum(8)
@@ -3954,7 +3960,7 @@ Dialog {
 
                         // 夏令时结束时间
                         RowLayout {
-                            // 夏令时开关为“禁用”时，夏令时的配置项保留显示但不可编辑
+                            // 夏令时开关为"禁用"时，夏令时的配置项保留显示但不可编辑
                             enabled: ckDstEnableCombo.currentIndex === 0
                             Layout.fillWidth: true
                             spacing: ScreenTools.scaleNum(8)
@@ -4009,7 +4015,7 @@ Dialog {
 
                         // 夏令时偏移时间
                         RowLayout {
-                            // 夏令时开关为“禁用”时，夏令时的配置项保留显示但不可编辑
+                            // 夏令时开关为"禁用"时，夏令时的配置项保留显示但不可编辑
                             enabled: ckDstEnableCombo.currentIndex === 0
                             Layout.fillWidth: true
                             spacing: ScreenTools.scaleNum(8)
@@ -4219,7 +4225,10 @@ Dialog {
                                     checkState: {
                                         var items = modelData.items;
                                         var count = 0;
+                                        var visibleCount = 0;
                                         for (var i = 0; i < items.length; i++) {
+                                            if (items[i].visible === false) continue;
+                                            visibleCount++;
                                             if (root.checkedMap[items[i].key] === true)
                                                 count++;
 
@@ -4227,7 +4236,7 @@ Dialog {
                                         if (count === 0)
                                             return Qt.Unchecked;
 
-                                        return count === items.length ? Qt.Checked : Qt.PartiallyChecked;
+                                        return count === visibleCount ? Qt.Checked : Qt.PartiallyChecked;
                                     }
 
                                     // 接管点击：勾选/取消勾选整组，避免内部切换破坏上面的绑定
@@ -4272,6 +4281,7 @@ Dialog {
                                         readonly property string itemKey: modelData.key
                                         readonly property string itemTitle: modelData.name
 
+                                        visible: modelData.visible !== false
                                         width: parent.width
                                         height: ScreenTools.scaleNum(28)
                                         color: root.selectedKey === itemKey ? "#E8E8E8" : "transparent"

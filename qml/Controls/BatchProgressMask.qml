@@ -76,6 +76,7 @@ Item {
                         font.family: "Microsoft YaHei"
                         font.pointSize: ScreenTools.scaleNum(10, true)
                         color: "#666666"
+                        textFormat: Text.RichText
                         verticalAlignment: Text.AlignVCenter
                         horizontalAlignment: Text.AlignLeft
                     }

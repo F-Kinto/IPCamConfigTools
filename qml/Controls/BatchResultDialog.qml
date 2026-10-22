@@ -55,7 +55,12 @@ AppContentDialog {
                         var arr = [];
                         var items = modelData.items;
                         for (var i = 0; i < items.length; i++) {
-                            arr.push({"isSep": false, "name": items[i].name, "ok": items[i].ok});
+                            arr.push({
+                                "isSep": false,
+                                "name": items[i].name,
+                                "ok": items[i].ok,
+                                "message": items[i].message || ""
+                            });
                             if (i < items.length - 1)
                                 arr.push({"isSep": true});
                         }
@@ -88,6 +93,8 @@ AppContentDialog {
                                 text: modelData.isSep ? "  |  " : _itemText(modelData)
 
                                 function _itemText(d) {
+                                    if (d.message !== "")
+                                        return d.name + ": <font color=\"" + (d.ok ? "#2F80ED" : "#E04040") + "\">" + d.message + "</font>";
                                     var c = d.ok ? "#2E7D32" : "#C62828";
                                     var t = d.ok ? qsTr("成功") : qsTr("失败");
                                     return d.name + ": <font color=\"" + c + "\">" + t + "</font>";

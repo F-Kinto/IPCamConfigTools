@@ -40,6 +40,28 @@ QString toStringField(const char* field, int maxLen)
 {
     return QString::fromUtf8(QByteArray(field, maxLen).constData());
 }
+
+/**
+ * @brief 从固件文件名提取版本号回退值
+ *
+ * 规则：取最后一个下划线到文件后缀之间的字符串。
+ * 例：B14_IronMan_05.03.32.36.img → 05.03.32.36
+ *     app_1.0.2.bin → 1.0.2
+ * 提取失败返回空串。
+ */
+QString extractVersionFromFileName(const QString& baseName)
+{
+    const int lastUnderscore = baseName.lastIndexOf(QLatin1Char('_'));
+    if (lastUnderscore < 0)
+        return QString();
+
+    const int lastDot = baseName.lastIndexOf(QLatin1Char('.'));
+    // lastDot 必须在 lastUnderscore 之后，且中间至少一个字符
+    if (lastDot <= lastUnderscore + 1)
+        return QString();
+
+    return baseName.mid(lastUnderscore + 1, lastDot - lastUnderscore - 1);
+}
 } // namespace
 
 DeviceUpgradeTask* DeviceUpgradeTask::m_instance = nullptr;
@@ -49,6 +71,35 @@ DeviceUpgradeTask* DeviceUpgradeTask::instance()
     if (!m_instance)
         m_instance = new DeviceUpgradeTask();
     return m_instance;
+}
+
+QString DeviceUpgradeTask::extractFileVersion(const QString& fileName)
+{
+    // 取纯文件名（去掉路径）
+    const QString baseName = fileName.mid(qMax(fileName.lastIndexOf(QLatin1Char('/')),
+                                                fileName.lastIndexOf(QLatin1Char('\\'))) + 1);
+    return ::extractVersionFromFileName(baseName);
+}
+
+int DeviceUpgradeTask::compareVersions(const QString& v1, const QString& v2)
+{
+    if (v1.isEmpty() || v2.isEmpty())
+        return 0;
+
+    const QStringList seg1 = v1.split(QLatin1Char('.'));
+    const QStringList seg2 = v2.split(QLatin1Char('.'));
+    const int maxSeg = qMax(seg1.size(), seg2.size());
+
+    for (int i = 0; i < maxSeg; ++i) {
+        bool ok1 = false, ok2 = false;
+        const int n1 = (i < seg1.size()) ? seg1[i].toInt(&ok1) : 0;
+        const int n2 = (i < seg2.size()) ? seg2[i].toInt(&ok2) : 0;
+        if (!ok1 || !ok2)
+            return 0; // 无法解析的段视为相等
+        if (n1 != n2)
+            return (n1 > n2) ? 1 : -1;
+    }
+    return 0;
 }
 
 DeviceUpgradeTask::DeviceUpgradeTask(QObject* parent)
@@ -115,6 +166,7 @@ bool DeviceUpgradeTask::startUpgrade(const QString& filePath, const QVariantList
     }
     const QString fileName = QFileInfo(filePath).fileName();
     m_lastDir = QFileInfo(filePath).absolutePath();
+    m_fileBaseName = fileName;
 
     qInfo().noquote() << QString("Firmware upgrade start: file=%1, size=%2, devices=%3")
                              .arg(fileName)
@@ -240,7 +292,7 @@ void DeviceUpgradeTask::slotUploadResponse(const QString& deviceKey, bool succes
         qWarning().noquote() << QString("Firmware upload FAIL: device=%1, err=%2").arg(deviceKey).arg(errorMessage);
         it->done = true;
         emit deviceProgress(deviceKey, eFailed);
-        emit deviceResult(deviceKey, false);
+        emit deviceResult(deviceKey, false, QString());
         checkAllDone();
         return;
     }
@@ -336,10 +388,11 @@ void DeviceUpgradeTask::slotHandleBroadcastReply(const QByteArray& data, const Q
         // 版本变化 = 升级成功
         if (!newVer.isEmpty() && newVer != it->oldVersion) {
             it->done = true;
+            it->newVersion = newVer;
             qInfo().noquote() << QString("Firmware upgrade SUCCESS: device=%1, old=%2, new=%3")
                                      .arg(it->key).arg(it->oldVersion).arg(newVer);
             emit deviceProgress(it->key, eSuccess);
-            emit deviceResult(it->key, true);
+            emit deviceResult(it->key, true, it->newVersion);
             checkAllDone();
             return; // 一次回包只处理一台
         }
@@ -356,11 +409,12 @@ void DeviceUpgradeTask::slotPollTimeout()
     if (m_pollSeconds >= kPollTimeoutSec) {
         // 超时：未判定成功的设备标记失败
         qWarning() << "Firmware upgrade: poll timeout, marking remaining as failed";
+        const QString fallbackVer = extractVersionFromFileName(m_fileBaseName);
         for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
             if (!it->done) {
                 it->done = true;
                 emit deviceProgress(it->key, eFailed);
-                emit deviceResult(it->key, false);
+                emit deviceResult(it->key, false, fallbackVer);
             }
         }
         stopBroadcastPoll();

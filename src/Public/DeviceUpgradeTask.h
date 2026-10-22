@@ -69,6 +69,22 @@ class COMMON_EXPORT DeviceUpgradeTask : public QObject {
      */
     Q_INVOKABLE QString lastUpgradeDir() const;
 
+    /**
+     * @brief 从固件文件名提取版本号
+     *
+     * 规则：取最后一个下划线到文件后缀之间的字符串。
+     * 例：B14_IronMan_05.03.32.36.img → 05.03.32.36
+     */
+    Q_INVOKABLE static QString extractFileVersion(const QString& fileName);
+
+    /**
+     * @brief 比较两个点分版本号
+     * @return >0 若 v1>v2；0 若相等；<0 若 v1<v2；无法解析时返回 0
+     *
+     * 按 '.' 分段逐段数值比较：05.03.32.36 vs 05.04.00.01
+     */
+    Q_INVOKABLE static int compareVersions(const QString& v1, const QString& v2);
+
   signals:
     /**
      * @brief 某设备升级进度变化
@@ -81,8 +97,9 @@ class COMMON_EXPORT DeviceUpgradeTask : public QObject {
      * @brief 某设备升级完成（成功/失败）
      * @param deviceKey 设备标识
      * @param success true=升级成功
+     * @param newVersion 升级后版本号（广播读到则取广播值，否则从文件名提取）
      */
-    void deviceResult(const QString& deviceKey, bool success);
+    void deviceResult(const QString& deviceKey, bool success, const QString& newVersion);
 
     /**
      * @brief 全部设备升级完成
@@ -122,6 +139,7 @@ class COMMON_EXPORT DeviceUpgradeTask : public QObject {
         QString ip;
         QString mac;
         QString oldVersion;   // 升级前版本
+        QString newVersion;   // 升级后版本（广播检测或文件名提取）
         bool uploaded = false; // 文件上传是否完成
         bool uploadOk = false; // 上传是否成功
         bool done = false;     // 是否已判定终态
@@ -143,5 +161,6 @@ class COMMON_EXPORT DeviceUpgradeTask : public QObject {
     };
     QVector<UploadRunner> m_uploadRunners;
 
-    QString m_lastDir; // 上次打开升级文件的目录
+    QString m_lastDir;      // 上次打开升级文件的目录
+    QString m_fileBaseName; // 当前升级文件名（不含路径，用于提取版本号回退值）
 };

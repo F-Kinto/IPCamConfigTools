@@ -229,6 +229,19 @@ ApplicationWindow {
         }
     }
 
+    // 固件升级后更新设备列表"升级后版本号"列
+    function setDeviceTargetVersion(deviceKey, newVersion) {
+        for (var i = 0; i < deviceModel.rowCount; i++) {
+            var dev = deviceModel.getRow(i);
+            if (DeviceManager.keyOf(dev) !== deviceKey)
+                continue;
+            dev.targetVersion = newVersion;
+            deviceModel.setRow(i, dev);
+            DeviceManager.setCheckedDevice(dev);
+            return ;
+        }
+    }
+
     // 当前选中（浅蓝高亮）的那一条单独保存一份，供单台操作取用
     function syncCurrentDevice() {
         var row = deviceTable.currentRow;
@@ -1095,7 +1108,7 @@ ApplicationWindow {
                     // 展示已选文件摘要；路径很长时末尾省略
                     text: root.upgradeFileSummary()
                     readOnly: true
-                    placeholderText: qsTr("请选择 %1 升级文件（可多选）").arg(".bin, .img")
+                    placeholderText: qsTr("请选择 %1 升级文件").arg(".bin, .img")
                 }
 
                 RowLayout {
@@ -1501,12 +1514,13 @@ ApplicationWindow {
         id: upgradeFileDialog
 
         title: qsTr("请选择升级文件")
-        selectMultiple: true
+        selectMultiple: false // 单选模式, 可支持多选文件
         nameFilters: [qsTr("固件文件 %1").arg("*.bin, *.img"), qsTr("所有文件 (*)")]
         folder: root.lastUpgradeDir !== "" ? ("file:///" + root.lastUpgradeDir.replace(/\\/g, "/")) : shortcuts.home
         onAccepted: {
             var paths = [];
             for (var i = 0; i < upgradeFileDialog.fileUrls.length; i++) paths.push(root.urlToLocalPath(upgradeFileDialog.fileUrls[i]))
+            // 单选模式只会有一个文件，保留数组形式兼容已有逻辑
             root.upgradeFiles = paths;
             // 记住本次所在目录，下次打开时自动定位
             if (paths.length > 0)
