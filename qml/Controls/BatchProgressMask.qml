@@ -60,21 +60,32 @@ Item {
 
                 Column {
                     spacing: ScreenTools.scaleNum(4)
+                    width: parent.width
 
                     Label {
-                        text: modelData.header
                         font.family: "Microsoft YaHei"
                         font.pointSize: ScreenTools.scaleNum(10, true)
                         font.bold: true
                         color: "#333333"
+                        textFormat: Text.RichText
+                        text: (modelData.uid || modelData.header) + " <font color=\"#2F80ED\">[" + (modelData.ip || "") + "]</font>:"
                     }
 
                     Label {
-                        x: ScreenTools.scaleNum(16)
                         text: modelData.status
                         font.family: "Microsoft YaHei"
                         font.pointSize: ScreenTools.scaleNum(10, true)
                         color: "#666666"
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignLeft
+                    }
+
+                    // 设备块间灰色分隔线（最后一块不显示）
+                    Rectangle {
+                        width: parent.width
+                        height: 1
+                        color: "#E0E0E0"
+                        visible: index < root.rows.length - 1
                     }
 
                 }

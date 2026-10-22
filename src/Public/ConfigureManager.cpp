@@ -214,6 +214,10 @@ QString ConfigureManager::getDeviceUrl(const EnumNameSpace::DeviceQuestUrl& cmd)
             return "http://%1/goform/getOtherSetttings?singleCMD=get_data_json&userid=admin&userkey=0192023a7bbd73250516f069df18b500&json_string=Wifi";
         case EnumNameSpace::DeviceQuestUrl::eGetRtspInfoUrl:
             return "http://%1/goform/getOtherSetttings?singleCMD=RtspConf&userid=admin&userkey=0192023a7bbd73250516f069df18b500";
+        case EnumNameSpace::DeviceQuestUrl::eDeviceRestart:
+            return "http://%1/goform/reboot?userid=admin&userkey=0192023a7bbd73250516f069df18b500";
+        case EnumNameSpace::DeviceQuestUrl::eFactoryReset:
+            return "http://%1/goform/restoreDefault?userid=admin&userkey=0192023a7bbd73250516f069df18b500";
         default:
             return "";
     }

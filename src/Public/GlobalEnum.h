@@ -23,6 +23,8 @@ enum class DeviceQuestUrl {
     eGetDeviceInfo,        // http://%1/goform/getOtherSetttings?...
     eGetJsonConfUrlWifi,   // http://%1/goform/getOtherSetttings?... (WiFi 配置)
     eGetRtspInfoUrl,       // http://%1/goform/getOtherSetttings?singleCMD=RtspConf&userid=admin&userkey=0192023a7bbd73250516f069df18b500
+    eDeviceRestart,        // http://%1/goform/reboot?userid=admin&userkey=0192023a7bbd73250516f069df18b500
+    eFactoryReset,         // http://%1/goform/restoreDefault?userid=admin&userkey=0192023a7bbd73250516f069df18b500
 };
 
 } // namespace EnumNameSpace

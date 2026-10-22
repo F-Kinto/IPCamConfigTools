@@ -131,6 +131,8 @@ ColumnLayout {
             rows.push({
                 "key": uid,
                 "header": "%1[%2]:".arg(uid).arg(ip),
+                "uid": uid,
+                "ip": ip,
                 "status": "",
                 "items": []
             });
@@ -183,6 +185,8 @@ ColumnLayout {
             rows.push(row.key === deviceKey ? {
                 "key": row.key,
                 "header": row.header,
+                "uid": row.uid,
+                "ip": row.ip,
                 "status": text,
                 "items": row.items
             } : row);
@@ -206,6 +210,8 @@ ColumnLayout {
                 rows.push({
                     "key": row.key,
                     "header": row.header,
+                    "uid": row.uid,
+                    "ip": row.ip,
                     "status": row.status,
                     "items": items
                 });

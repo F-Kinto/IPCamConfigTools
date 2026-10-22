@@ -46,8 +46,8 @@ Popup {
         font.pointSize: ScreenTools.scaleNum(10, true)
     }
 
-    // 宽度随文案自适应
-    width: toastLabel.implicitWidth + toastLabel.leftPadding + toastLabel.rightPadding
+    // 宽度随文案自适应（Label.implicitWidth 已含自身 padding）
+    width: toastLabel.implicitWidth
 
     enter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150 }

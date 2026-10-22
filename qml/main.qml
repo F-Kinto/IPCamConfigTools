@@ -157,6 +157,34 @@ ApplicationWindow {
         root.selectedRows = list;
     }
 
+    // 设备命令待响应（prefix → { total, results: [{uid,ip,ok,msg}] }）
+    property var _cmdPending: ({})
+    // 设备命令 loading 遮罩
+    property bool _cmdBusy: false
+    property string _cmdBusyText: ""
+
+    // 批量向勾选设备发送 HTTP GET 命令（重启 / 恢复出厂等），customMessage 前缀用于响应分发
+    // cmd: DeviceQuestUrl 枚举整数值（5=eDeviceRestart, 6=eFactoryReset）
+    // prefix: customMessage 前缀（"deviceRestart" / "factoryReset"）
+    function sendDeviceCommand(cmd, prefix) {
+        var devices = DeviceManager.checkedDevices();
+        var count = 0;
+        for (var i = 0; i < devices.length; i++) {
+            var ip = devices[i]["ip"] || "";
+            if (ip === "")
+                continue;
+            var uid = devices[i]["uid"] || devices[i]["mac"] || ip;
+            // 10 秒超时
+            DeviceApiClient.getDeviceAsync(cmd, ip, prefix + "_" + uid + "|" + ip, 10 * 1000);
+            count++;
+        }
+        // 初始化待响应结构
+        _cmdPending[prefix] = { "total": count, "results": [] };
+        // 显示 loading 遮罩
+        _cmdBusyText = prefix === "deviceRestart" ? qsTr("正在重启设备...") : qsTr("正在重置设备...");
+        _cmdBusy = true;
+    }
+
     // 表格里某一行的复选框勾选/取消：同步进 selectedRows，"已选数量"与"请先选择设备"的校验都读这份数据，自动保持一致
     function setRowChecked(row, checked) {
         // 直播中锁定勾选：关闭直播前不允许变更"已选设备"
@@ -1113,7 +1141,6 @@ ApplicationWindow {
 
                     AppButton {
                         text: qsTr("目录升级")
-                        onClicked: root.logAction("我点击了%1按钮".arg(text))
                     }
 
                 }
@@ -1123,7 +1150,6 @@ ApplicationWindow {
                     Layout.preferredHeight: root.controlHeight
                     model: [qsTr("上传音频文件"), qsTr("上传配置文件")]
                     visible: false
-                    onActivated: root.logAction("上传类型切换为'%1'".arg(currentText))
                 }
 
                 AppTextField {
@@ -1317,7 +1343,6 @@ ApplicationWindow {
                 id: sysLangCombo
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.controlHeight
-                // 枚举 eChinese=0、eEnglish=1 与 model 顺序一致，currentIndex 直接互存互取
                 model: ["简体中文", "English"]
                 currentIndex: ConfigureManager.languageType
             }
@@ -1384,10 +1409,10 @@ ApplicationWindow {
                 commandPanel.executeSetIpChecked();
                 break;
             case "reboot":
-                root.logAction("已确认重启设备: %1 台".arg(root.selectedCount));
+                root.sendDeviceCommand(5, "deviceRestart");
                 break;
             case "factoryReset":
-                root.logAction("已确认恢复出厂设置: %1 台".arg(root.selectedCount));
+                root.sendDeviceCommand(6, "factoryReset");
                 break;
             case "tab":
                 root.closeLivePreview();
@@ -1402,6 +1427,67 @@ ApplicationWindow {
 
         onRejected: {
             confirmBox.confirmAction = "";
+        }
+    }
+
+    // ===== 设备命令结果弹窗 =====
+    DeviceCmdResultBox {
+        id: cmdResultBox
+    }
+
+    // ===== 设备命令 HTTP 响应 =====
+    // 处理重启 / 恢复出厂等设备命令的异步回调
+    Connections {
+        target: DeviceApiClient
+        function onSignalHttpResponse(customMsg, success, responseData, errMsg) {
+            // customMessage 格式：前缀_uid|ip
+            var prefix = "";
+            var payload = "";
+            if (customMsg.indexOf("deviceRestart_") === 0) {
+                prefix = "deviceRestart";
+                payload = customMsg.substring("deviceRestart_".length);
+            } else if (customMsg.indexOf("factoryReset_") === 0) {
+                prefix = "factoryReset";
+                payload = customMsg.substring("factoryReset_".length);
+            }
+            if (prefix === "")
+                return;
+
+            var sep = payload.indexOf("|");
+            var uid = sep >= 0 ? payload.substring(0, sep) : payload;
+            var ip  = sep >= 0 ? payload.substring(sep + 1) : "";
+
+            var actionName = prefix === "deviceRestart" ? qsTr("设备重启") : qsTr("恢复出厂设置");
+
+            // 收集结果
+            var pending = root._cmdPending[prefix];
+            if (!pending)
+                return;
+            pending.results.push({ "uid": uid, "ip": ip, "ok": success, "msg": success ? "" : errMsg });
+
+            // 全部响应完毕 → 关闭 loading → 弹结果窗
+            if (pending.results.length >= pending.total) {
+                root._cmdBusy = false;
+                root._cmdBusyText = "";
+                // 汇总行
+                var okCount = 0;
+                var failCount = 0;
+                for (var i = 0; i < pending.results.length; i++) {
+                    if (pending.results[i].ok)
+                        okCount++;
+                    else
+                        failCount++;
+                }
+                var summary = qsTr("总共%1台设备, 成功%2台, 失败%3台").arg(pending.total).arg(okCount).arg(failCount);
+                // 构建结果行数组，传给 DeviceCmdResultBox（ListView + Rectangle 分隔线）
+                var rows = [];
+                for (var j = 0; j < pending.results.length; j++) {
+                    var r = pending.results[j];
+                    rows.push({ "uid": r.uid, "ip": r.ip, "ok": r.ok, "actionName": actionName });
+                }
+                cmdResultBox.showResult(actionName, summary, rows);
+                delete root._cmdPending[prefix];
+            }
         }
     }
 
@@ -1456,7 +1542,6 @@ ApplicationWindow {
         property string titleContent: ""
         property bool saved: false
         // "OSD修改"弹窗点保存时发出：其它设置弹窗监听并把这份数据按协议格式写入 other_settings.json
-        // （两边共用同一个 osd 条目，重启后显示一致）
         signal osdSavedFromDialog()
     }
 
@@ -1482,6 +1567,14 @@ ApplicationWindow {
         z: 100
         busy: root.searching
         text: qsTr("设备搜索中...")
+    }
+
+    // ===== 设备命令（重启 / 恢复出厂）loading 遮罩 =====
+    AppBusyMask {
+        anchors.fill: parent
+        z: 100
+        busy: root._cmdBusy
+        text: root._cmdBusyText
     }
 
     // ===== 执行多台修改（设定IP）的遮罩 =====
